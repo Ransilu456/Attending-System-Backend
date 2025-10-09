@@ -1,6 +1,5 @@
 import { logInfo, logWarning, logError } from '../utils/terminal.js';
 import Student from '../models/student.model.js';
-import { sendTextMessage } from './whatsapp.service.js';
 
 
 export const autoMarkLeaveAttendance = async () => {
@@ -57,27 +56,6 @@ export const autoMarkLeaveAttendance = async () => {
           : 0;
 
         await student.save();
-
-        const messageText = `🏫 Automated Attendance Update
-
-Dear Parent, 
-Your child ${student.name} (Index: ${student.indexNumber}) did not scan the QR code when leaving today.
-The system has automatically marked their departure time as 6:30 PM.
-Please remind your child to properly scan both when arriving and leaving.
-
-Thank you.`;
-
-        if (student.parent_telephone) {
-          const result = await sendTextMessage(student.parent_telephone, messageText);
-
-          if (result.success) {
-            logInfo(`Successfully sent automatic leave notification to parent of ${student.name}`);
-          } else {
-            logWarning(`Failed to send message to parent of ${student.name}: ${result.error}`);
-          }
-        } else {
-          logWarning(`No parent telephone found for student: ${student.name}`);
-        }
 
         logInfo(`Successfully marked leave attendance for student: ${student.name}`);
       } catch (error) {
@@ -147,29 +125,6 @@ export const checkAllPastAttendance = async () => {
 
           await student.save();
 
-          const messageText = `🏫 Past Attendance Records Update
-
-Dear Parent,
-Your child ${student.name} (Index: ${student.indexNumber}) had ${incompleteRecords.length} incomplete attendance record.
-The system has automatically marked their departure time as 6:30 PM for these dates:
-${incompleteRecords.map(record => record.date.toDateString()).join('\n')}
-
-Please ensure your child properly scans both when arriving and leaving.
-
-Thank you.`;
-
-          if (student.parent_telephone) {
-            const result = await sendTextMessage(student.parent_telephone, messageText);
-
-            if (result.success) {
-              logInfo(`Successfully sent past attendance notification to parent of ${student.name}`);
-            } else {
-              logWarning(`Failed to send message to parent of ${student.name}: ${result.error}`);
-            }
-          } else {
-            logWarning(`No parent telephone found for student: ${student.name}`);
-          }
-
           logInfo(`Successfully marked past attendance for student: ${student.name}`);
         }
       } catch (error) {
@@ -214,11 +169,9 @@ export const checkPreviousDayAttendance = async () => {
 
     logInfo(`Found ${students.length} incomplete attendance records from previous day`);
 
-    // Set leave time to 6:30 PM of yesterday
     const leaveTime = new Date(yesterday);
     leaveTime.setHours(18, 30, 0, 0);
 
-    // Process each student
     for (const student of students) {
       try {
         const attendanceIndex = student.attendanceHistory.findIndex(
@@ -245,27 +198,6 @@ export const checkPreviousDayAttendance = async () => {
           : 0;
 
         await student.save();
-
-        const messageText = `🏫 Previous Day Attendance Update
-
-Dear Parent,
-Your child ${student.name} (Index: ${student.indexNumber}) had an incomplete attendance record for ${yesterday.toDateString()}.
-The system has automatically marked their departure time as 6:30 PM for that day.
-Please ensure your child properly scans both when arriving and leaving.
-
-Thank you.`;
-
-        if (student.parent_telephone) {
-          const result = await sendTextMessage(student.parent_telephone, messageText);
-
-          if (result.success) {
-            logInfo(`Successfully sent previous day attendance notification to parent of ${student.name}`);
-          } else {
-            logWarning(`Failed to send message to parent of ${student.name}: ${result.error}`);
-          }
-        } else {
-          logWarning(`No parent telephone found for student: ${student.name}`);
-        }
 
         logInfo(`Successfully marked previous day attendance for student: ${student.name}`);
       } catch (error) {

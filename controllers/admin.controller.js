@@ -17,13 +17,11 @@ export const registerAdmin = async (req, res) => {
     return res.status(400).json({ message: 'Please provide all required fields.' });
   }
 
-  // Check if admin exists
   const existingAdmin = await Admin.findOne({ email });
   if (existingAdmin) {
     return res.status(400).json({ message: 'Admin already exists.' });
   }
 
-  // Create a new admin instance
   const newAdmin = new Admin({
     name,
     email,
@@ -32,7 +30,6 @@ export const registerAdmin = async (req, res) => {
   });
 
   try {
-    // Save the new admin
     await newAdmin.save();
     res.status(201).json({ message: 'Admin registered successfully.' });
   } catch (error) {

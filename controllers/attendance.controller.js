@@ -1,6 +1,5 @@
 import Student from '../models/student.model.js';
 import { DateTime } from 'luxon';
-import { sendAttendanceNotification } from '../controllers/messaging.controller.js';
 import mongoose from 'mongoose';
 
 const getDateRange = (date = new Date()) => {
@@ -69,11 +68,9 @@ export const getAutoCheckoutSettings = async (req, res) => {
 
 export const runAutoCheckout = async (req, res) => {
   try {
-    // Get current date
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    // Get all students who checked in today but didn't check out
     const students = await Student.find({
       'attendanceHistory.date': {
         $gte: today
@@ -87,10 +84,8 @@ export const runAutoCheckout = async (req, res) => {
     let processed = 0;
     let failed = 0;
     
-    // Process each student
     for (const student of students) {
       try {
-        // Find today's attendance record
         const todayRecord = student.attendanceHistory.find(record => {
           const recordDate = new Date(record.date);
           recordDate.setHours(0, 0, 0, 0);
@@ -100,26 +95,13 @@ export const runAutoCheckout = async (req, res) => {
         });
         
         if (todayRecord) {
-          // Mark the student as left
           await student.markAttendance(
             'left',
             null,
             'Auto checkout system',
             'Auto Checkout'
           );
-          
-          // Send notification if enabled
-          if (autoCheckoutSettings.sendNotification && student.parent_telephone) {
-            try {
-              await sendAttendanceNotification(
-                student._id,
-                'left', 
-                new Date()
-              );
-            } catch (notificationError) {
-              console.error(`Error sending auto checkout notification to ${student.name}:`, notificationError);
-            }
-          }
+        
           
           processed++;
         }
@@ -129,7 +111,6 @@ export const runAutoCheckout = async (req, res) => {
       }
     }
     
-    // Update last run timestamp
     autoCheckoutSettings.lastRun = new Date();
     
     return res.status(200).json({
@@ -153,7 +134,6 @@ export const runAutoCheckout = async (req, res) => {
 
 export const getScannedStudentsToday = async (req, res) => {
   try {
-    // Get today's date range in Sri Lanka timezone (or server timezone)
     const now = DateTime.now().setZone('Asia/Colombo');
     const startOfDay = now.startOf('day').toJSDate();
     const endOfDay = now.endOf('day').toJSDate();
@@ -164,7 +144,6 @@ export const getScannedStudentsToday = async (req, res) => {
       currentTime: now.toJSDate()
     });
 
-    // Find students with attendance records for today
     const students = await Student.find({
       "attendanceHistory": {
         $elemMatch: {
@@ -178,22 +157,18 @@ export const getScannedStudentsToday = async (req, res) => {
 
     console.log(`Found ${students.length} students with attendance records for today`);
 
-    // Process attendance records
     const processedStudents = students.map(student => {
-      // Find today's attendance records
       const todayRecords = student.attendanceHistory.filter(record => {
         const recordDate = new Date(record.date);
         return recordDate >= startOfDay && recordDate <= endOfDay;
       });
 
-      // Get the most recent record
       const latestRecord = todayRecords.length > 0
         ? todayRecords.reduce((latest, current) => {
           return new Date(current.date) > new Date(latest.date) ? current : latest;
         })
         : null;
 
-      // Format the record for display
       return {
         _id: student._id,
         name: student.name,
@@ -203,7 +178,6 @@ export const getScannedStudentsToday = async (req, res) => {
         entryTime: latestRecord?.entryTime || null,
         leaveTime: latestRecord?.leaveTime || null,
         date: latestRecord?.date || null,
-        // Include message status if available
         messageStatus: student.messages?.length > 0
           ? student.messages[student.messages.length - 1].status
           : null,
@@ -211,13 +185,11 @@ export const getScannedStudentsToday = async (req, res) => {
       };
     });
 
-    // Count students by status
     const totalStudents = await Student.countDocuments({ status: 'active' });
     const presentCount = processedStudents.filter(s => s.status === 'present' || s.status === 'entered').length;
     const leftCount = processedStudents.filter(s => s.status === 'left').length;
     const absentCount = totalStudents - presentCount - leftCount;
 
-    // Calculate statistics
     const stats = {
       totalCount: totalStudents,
       presentCount,
@@ -247,7 +219,6 @@ export const getAttendanceByDate = async (req, res) => {
   try {
     const { date } = req.params;
     
-    // Parse the date and create range for the entire day
     const targetDate = DateTime.fromISO(date).setZone('Asia/Colombo');
     const startOfDay = targetDate.startOf('day').toJSDate();
     const endOfDay = targetDate.endOf('day').toJSDate();
@@ -258,7 +229,6 @@ export const getAttendanceByDate = async (req, res) => {
       endOfDay
     });
 
-    // Find students with attendance records for the target date
     const students = await Student.find({
       "attendanceHistory": {
         $elemMatch: {
@@ -272,22 +242,18 @@ export const getAttendanceByDate = async (req, res) => {
 
     console.log(`Found ${students.length} students with attendance records for ${date}`);
 
-    // Process attendance records
     const processedStudents = students.map(student => {
-      // Find the date's attendance records
       const dateRecords = student.attendanceHistory.filter(record => {
         const recordDate = new Date(record.date);
         return recordDate >= startOfDay && recordDate <= endOfDay;
       });
 
-      // Get the most recent record
       const latestRecord = dateRecords.length > 0
         ? dateRecords.reduce((latest, current) => {
           return new Date(current.date) > new Date(latest.date) ? current : latest;
         })
         : null;
 
-      // Format the record for display
       return {
         _id: student._id,
         name: student.name,
@@ -301,13 +267,11 @@ export const getAttendanceByDate = async (req, res) => {
       };
     });
 
-    // Count students by status
     const totalStudents = await Student.countDocuments({ status: 'active' });
     const presentCount = processedStudents.filter(s => s.status === 'present' || s.status === 'entered').length;
     const leftCount = processedStudents.filter(s => s.status === 'left').length;
     const absentCount = totalStudents - presentCount - leftCount;
 
-    // Calculate statistics
     const stats = {
       totalCount: totalStudents,
       presentCount,
@@ -364,7 +328,6 @@ export const getStudentAttendanceHistory = async (req, res) => {
 
     console.log(`Fetching attendance history for student: ${student.name} (${studentId})`);
 
-    // Filter attendance history records by date range if provided
     let filteredHistory = [...student.attendanceHistory];
     
     if (startDate) {
@@ -382,17 +345,14 @@ export const getStudentAttendanceHistory = async (req, res) => {
       );
     }
 
-    // Sort the filtered records
     const sortModifier = sortOrder.toLowerCase() === 'asc' ? 1 : -1;
     filteredHistory.sort((a, b) => {
       if (sortBy === 'date') {
         return sortModifier * (new Date(b.date) - new Date(a.date));
       }
-      // Handle other sort fields if needed
       return 0;
     });
 
-    // Calculate stats
     const totalRecords = filteredHistory.length;
     const presentCount = filteredHistory.filter(
       record => record.status === 'present' || record.status === 'entered'
@@ -404,7 +364,6 @@ export const getStudentAttendanceHistory = async (req, res) => {
       record => record.status === 'left'
     ).length;
 
-    // Apply pagination
     const paginatedRecords = filteredHistory.slice(
       parseInt(offset), 
       parseInt(offset) + parseInt(limit)
@@ -412,7 +371,6 @@ export const getStudentAttendanceHistory = async (req, res) => {
 
     console.log(`Found ${totalRecords} attendance records, returning ${paginatedRecords.length}`);
 
-    // Return the formatted response
     return res.status(200).json({
       success: true,
       data: {
@@ -507,6 +465,7 @@ export const deleteAttendanceRecord = async (req, res) => {
     }
 
     student.attendanceHistory.splice(recordIndex, 1);
+    student.lastAttendance = null;
     await student.save();
 
     return res.json({

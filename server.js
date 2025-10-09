@@ -7,7 +7,6 @@ import path from 'path';
 import studentRoutes from './routes/students.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import qrScannerRoutes from './routes/qrScanner.routes.js';
-import whatsappRoutes from './routes/whatsapp.routes.js';
 import attendanceRoutes from './routes/attendance.routes.js';
 import mongoose from 'mongoose';
 import { startScheduler } from './services/schedulerService.js';
@@ -17,7 +16,7 @@ import { printBanner, logInfo, logSuccess, logWarning, logError, logSection, log
 import { connectDB, closeDB } from './config/database.js';
 
 dotenv.config();
-
+/*
 const qrCodesDir = path.join(process.cwd(), 'public', 'qr-codes');
 const whatsappSessionDir = path.join(process.cwd(), 'whatsapp-session');
 
@@ -27,7 +26,7 @@ const whatsappSessionDir = path.join(process.cwd(), 'whatsapp-session');
     logInfo(`Created directory: ${dir}`);
   }
 });
-
+*/
 const app = express();
 const port = process.env.PORT || 5001;
 
@@ -105,7 +104,6 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/api/students', studentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/qr', qrScannerRoutes);
-app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/public', express.static('public'));
 
@@ -169,6 +167,10 @@ const startServer = async () => {
     logSection('Database');
     await connectDB();
     succeedSpinner('db', 'Connected to MongoDB successfully');
+/*
+    initializeWhatsApp().catch(err => {
+      console.error('WhatsApp initialization failed:', err);
+    });*/
 
     logSection('API Routes');
     logInfo('GET  /api/health - Health check endpoint');

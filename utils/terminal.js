@@ -1,3 +1,5 @@
+import chalk from "chalk";
+
 const icons = {
     info: '🔹',
     success: '✨',
@@ -13,7 +15,7 @@ const icons = {
     web: '🌐',
     report: '📊',
     attendance: '📋',
-    qr: '��',
+    qr: '📷',
     message: '💬',
     network: '🌍',
     firewall: '🛡️',
@@ -57,138 +59,112 @@ const icons = {
 
 const spinners = {};
 
+// ─── Banner ─────────────────────────────────────────────
 export const printBanner = () => {
     console.clear();
-    
-    const border = '═'.repeat(process.stdout.columns || 80);
+
+    const border = chalk.blueBright('═'.repeat(process.stdout.columns || 80));
     console.log(border);
 
-    // ASCII Art Banner
-    console.log(`
+    console.log(chalk.cyanBright(`
     ██████╗ ██████╗     █████╗ ████████╗████████╗███████╗███╗   ██╗██████╗ ███████╗███╗   ██╗ ██████╗███████╗
     ██╔══██╗██╔══██╗   ██╔══██╗╚══██╔══╝╚══██╔══╝██╔════╝████╗  ██║██╔══██╗██╔════╝████╗  ██║██╔════╝██╔════╝
     ██████╔╝██████╔╝   ███████║   ██║      ██║   █████╗  ██╔██╗ ██║██║  ██║█████╗  ██╔██╗ ██║██║     █████╗  
     ██╔══██╗██╔══██╗   ██╔══██║   ██║      ██║   ██╔══╝  ██║╚██╗██║██║  ██║██╔══╝  ██║╚██╗██║██║     ██╔══╝  
     ██║  ██║██║  ██║   ██║  ██║   ██║      ██║   ███████╗██║ ╚████║██████╔╝███████╗██║ ╚████║╚██████╗███████╗
     ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝  ╚═╝   ╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═══╝╚═════╝ ╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝
-    `);
+    `));
 
-    console.log('╔' + '═'.repeat((process.stdout.columns || 80) - 2) + '╗');
-    const subtitle = 'Smart Attendance Management System';
-    const version = 'v5.0.0';
+    console.log(chalk.blueBright('╔' + '═'.repeat((process.stdout.columns || 80) - 2) + '╗'));
+    const subtitle = chalk.bold('Smart Attendance Management System');
+    const version = chalk.greenBright('v5.0.0');
     const padding = Math.floor(((process.stdout.columns || 80) - subtitle.length - version.length - 4) / 2);
     console.log(
-        '║' + ' '.repeat(padding) + 
-        subtitle + ' ' + version + 
-        ' '.repeat((process.stdout.columns || 80) - subtitle.length - version.length - padding - 4) + 
-        '║'
+        chalk.blueBright('║') + ' '.repeat(padding) +
+        subtitle + ' ' + version +
+        ' '.repeat((process.stdout.columns || 80) - subtitle.length - version.length - padding - 4) +
+        chalk.blueBright('║')
     );
-    console.log('╚' + '═'.repeat((process.stdout.columns || 80) - 2) + '╝');
+    console.log(chalk.blueBright('╚' + '═'.repeat((process.stdout.columns || 80) - 2) + '╝'));
 };
 
-export const logInfo = (message) => {
-    console.log(icons.info + ' ' + message);
-};
-
-export const logSuccess = (message) => {
-    console.log(icons.success + ' ' + message);
-};
-
-export const logWarning = (message) => {
-    console.log(icons.warning + ' ' + message);
-};
-
-export const logError = (message, error = null) => {
-    console.log('\n' + icons.error + ' ' + message);
-    if (error && error.stack) {
-        console.log('  Stack Trace:');
-        console.log(error.stack);
+// ─── Logging Functions ──────────────────────────────────
+export const logInfo = (msg) => console.log(chalk.blue(icons.info + ' ' + msg));
+export const logSuccess = (msg) => console.log(chalk.green(icons.success + ' ' + msg));
+export const logWarning = (msg) => console.log(chalk.yellow(icons.warning + ' ' + msg));
+export const logError = (msg, error = null) => {
+    console.log(chalk.red('\n' + icons.error + ' ' + msg));
+    if (error?.stack) {
+        console.log(chalk.gray('  Stack Trace:'));
+        console.log(chalk.red(error.stack));
     }
     console.log();
 };
 
-export const logReport = (message) => {
-    console.log(icons.report + ' ' + message);
-};
+export const logReport = (msg) => console.log(chalk.magenta(icons.report + ' ' + msg));
+export const logAttendance = (msg) => console.log(chalk.cyan(icons.attendance + ' ' + msg));
+export const logQR = (msg) => console.log(chalk.greenBright(icons.qr + ' ' + msg));
+export const logMessage = (msg) => console.log(chalk.blueBright(icons.message + ' ' + msg));
+export const logNetwork = (msg) => console.log(chalk.cyanBright(icons.network + ' ' + msg));
+export const logSecurity = (msg) => console.log(chalk.redBright(icons.security + ' ' + msg));
+export const logConnection = (msg) => console.log(chalk.yellowBright(icons.connection + ' ' + msg));
+export const logDeploy = (msg) => console.log(chalk.greenBright(icons.deploy + ' ' + msg));
+export const logMonitor = (msg) => console.log(chalk.magentaBright(icons.monitor + ' ' + msg));
+export const logTerminal = (msg) => console.log(chalk.whiteBright(icons.terminal + ' ' + msg));
 
-export const logAttendance = (message) => {
-    console.log(icons.attendance + ' ' + message);
-};
-
-export const logQR = (message) => {
-    console.log(icons.qr + ' ' + message);
-};
-
-export const logMessage = (message) => {
-    console.log(icons.message + ' ' + message);
-};
-
+// ─── Sections ───────────────────────────────────────────
 export const logSection = (title, icon = '') => {
     const sectionIcon = icons[title.toLowerCase()] || icon || '📌';
     const cols = process.stdout.columns || 80;
-    console.log('\n' + '┌─' + sectionIcon + '─' + '─'.repeat(cols - 6) + '┐');
-    console.log('│ ' + title + 
-                ' '.repeat(cols - title.length - 4) + 
-                ' │');
-    console.log('└' + '─'.repeat(cols - 2) + '┘');
+    console.log(chalk.blueBright('\n┌─' + sectionIcon + '─' + '─'.repeat(cols - 6) + '┐'));
+    console.log(chalk.whiteBright('│ ' + title + ' '.repeat(cols - title.length - 4) + ' │'));
+    console.log(chalk.blueBright('└' + '─'.repeat(cols - 2) + '┘'));
 };
 
 export const logServerStart = (port) => {
     const message = `Server running on port ${port}`;
     const timestamp = new Date().toLocaleTimeString();
     const cols = process.stdout.columns || 80;
-    
-    console.log('\n' + '┌' + '─'.repeat(cols - 2) + '┐');
-    console.log('│' + ' '.repeat((cols - message.length - 2) / 2) + 
-                message + 
-                ' '.repeat((cols - message.length - 2) / 2) + 
-                '│');
-    console.log('│' + ' '.repeat((cols - timestamp.length - 2) / 2) + 
-                timestamp + 
-                ' '.repeat((cols - timestamp.length - 2) / 2) + 
-                '│');
-    console.log('└' + '─'.repeat(cols - 2) + '┘\n');
-    
+
+    console.log(chalk.green('\n' + '┌' + '─'.repeat(cols - 2) + '┐'));
+    console.log(chalk.green('│' + ' '.repeat((cols - message.length - 2) / 2) + message +
+                ' '.repeat((cols - message.length - 2) / 2) + '│'));
+    console.log(chalk.green('│' + ' '.repeat((cols - timestamp.length - 2) / 2) + timestamp +
+                ' '.repeat((cols - timestamp.length - 2) / 2) + '│'));
+    console.log(chalk.green('└' + '─'.repeat(cols - 2) + '┘\n'));
+
     logInfo('System is configured to count weekends in attendance reports');
 };
 
-// Enhanced spinner with progress
+// ─── Spinners ──────────────────────────────────────────
 export const startSpinner = (id, text) => {
-    if (spinners[id]) {
-        stopSpinner(id);
-    }
-    spinners[id] = {
-        text,
-        startTime: Date.now(),
-        progress: 0
-    };
-    process.stdout.write(text + '...');
+    if (spinners[id]) stopSpinner(id);
+    spinners[id] = { text, startTime: Date.now(), progress: 0 };
+    process.stdout.write(chalk.yellow(text + '...'));
     return spinners[id];
 };
 
 export const updateSpinner = (id, text, progress = null) => {
     if (spinners[id]) {
         spinners[id].text = text;
-        if (progress !== null) {
-            spinners[id].progress = progress;
-        }
-        const progressBar = progress !== null ? ` [${Math.floor(progress * 100)}%]` : '';
-        process.stdout.write('\r' + text + progressBar + '...');
+        if (progress !== null) spinners[id].progress = progress;
+        const progressBar = progress !== null ? chalk.cyan(` [${Math.floor(progress * 100)}%]`) : '';
+        process.stdout.write('\r' + chalk.yellow(text) + progressBar + '...');
     }
 };
 
 export const succeedSpinner = (id, text) => {
     if (spinners[id]) {
-        const timeTaken = Date.now() - spinners[id].startTime;
-        process.stdout.write('\r' + (text || spinners[id].text) + ' ✓ (' + timeTaken + 'ms)\n');
+        const time = Date.now() - spinners[id].startTime;
+        process.stdout.write('\r' + chalk.green((text || spinners[id].text) + ' ✓ (' + time + 'ms)\n'));
         delete spinners[id];
     }
 };
 
 export const failSpinner = (id, text) => {
     if (spinners[id]) {
-        const timeTaken = Date.now() - spinners[id].startTime;
-        process.stdout.write('\r' + (text || spinners[id].text) + ' ✗ (' + timeTaken + 'ms)\n');
+        const time = Date.now() - spinners[id].startTime;
+        process.stdout.write('\r' + chalk.red((text || spinners[id].text) + ' ✗ (' + time + 'ms)\n'));
         delete spinners[id];
     }
 };
@@ -200,110 +176,88 @@ export const stopSpinner = (id) => {
     }
 };
 
-// New utility functions
+// ─── Utilities ─────────────────────────────────────────
 export const logProgress = (current, total, message = 'Progress') => {
     const progress = current / total;
     const barLength = 30;
     const filledLength = Math.round(barLength * progress);
-    const bar = '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength);
+    const bar = chalk.green('█'.repeat(filledLength)) + chalk.gray('░'.repeat(barLength - filledLength));
     const percentage = Math.round(progress * 100);
-    process.stdout.write(`\r${message}: [${bar}] ${percentage}%`);
-    if (current === total) {
-        process.stdout.write('\n');
-    }
+    process.stdout.write(`\r${chalk.cyan(message)}: [${bar}] ${chalk.yellow(percentage + '%')}`);
+    if (current === total) process.stdout.write('\n');
 };
 
 export const logBox = (title, content) => {
     const cols = process.stdout.columns || 80;
     const padding = 2;
     const width = cols - (padding * 2);
-    
-    console.log('\n' + '┌' + '─'.repeat(width) + '┐');
-    console.log('│' + ' '.repeat(padding) + title + ' '.repeat(width - title.length - (padding * 2)) + '│');
-    console.log('├' + '─'.repeat(width) + '┤');
-    
+
+    console.log(chalk.blue('\n┌' + '─'.repeat(width) + '┐'));
+    console.log(chalk.white('│' + ' '.repeat(padding) + chalk.bold(title) +
+                ' '.repeat(width - title.length - (padding * 2)) + '│'));
+    console.log(chalk.blue('├' + '─'.repeat(width) + '┤'));
+
     const lines = content.split('\n');
     lines.forEach(line => {
-        const paddedLine = line.padEnd(width - (padding * 2));
-        console.log('│' + ' '.repeat(padding) + paddedLine + ' '.repeat(padding) + '│');
+        const padded = line.padEnd(width - (padding * 2));
+        console.log('│' + ' '.repeat(padding) + chalk.gray(padded) + ' '.repeat(padding) + '│');
     });
-    
-    console.log('└' + '─'.repeat(width) + '┘\n');
+
+    console.log(chalk.blue('└' + '─'.repeat(width) + '┘\n'));
 };
 
 export const logTable = (data, heading = '') => {
-    if (!data || !data.length) {
-        logWarning('No data to display in table');
-        return;
-    }
-    
-    if (heading) {
-        logBox(heading, '');
-    }
-    
+    if (!data || !data.length) return logWarning('No data to display in table');
+    if (heading) logBox(heading, '');
     console.table(data);
 };
 
 export const logTimeTaken = (operation, startTime) => {
-    const timeTaken = Date.now() - startTime;
-    const formattedTime = timeTaken < 1000 ? 
-        `${timeTaken}ms` : 
-        `${(timeTaken / 1000).toFixed(2)}s`;
-    console.log(icons.time + ' ' + `${operation}: ${formattedTime}`);
+    const time = Date.now() - startTime;
+    const formatted = time < 1000 ? `${time}ms` : `${(time / 1000).toFixed(2)}s`;
+    console.log(chalk.cyan(icons.time + ' ' + `${operation}: ${formatted}`));
 };
 
-export const formatObject = (obj) => {
-    return JSON.stringify(obj, null, 2);
-};
-
+export const formatObject = (obj) => JSON.stringify(obj, null, 2);
 export const getIcons = () => icons;
 
-export const logNetwork = (message) => {
-    console.log(icons.network + ' ' + message);
-};
-
-export const logSecurity = (message) => {
-    console.log(icons.security + ' ' + message);
-};
-
-export const logConnection = (message) => {
-    console.log(icons.connection + ' ' + message);
-};
-
-export const logDeploy = (message) => {
-    console.log(icons.deploy + ' ' + message);
-};
-
-export const logMonitor = (message) => {
-    console.log(icons.monitor + ' ' + message);
-};
-
-export const logTerminal = (message) => {
-    console.log(icons.terminal + ' ' + message);
-};
-
-// Export all functions
+// ─── Export Default ────────────────────────────────────
 export default {
+    // Banner
     printBanner,
+
+    // Logs
     logInfo,
     logSuccess,
     logWarning,
     logError,
+    logReport,
+    logAttendance,
+    logQR,
+    logMessage,
     logNetwork,
     logSecurity,
     logConnection,
     logDeploy,
     logMonitor,
     logTerminal,
-    logProgress,
-    logBox,
-    logTable,
-    logTimeTaken,
-    formatObject,
+
+    // Sections / Server
+    logSection,
+    logServerStart,
+
+    // Spinners
     startSpinner,
     updateSpinner,
     succeedSpinner,
     failSpinner,
     stopSpinner,
+
+    // Utilities
+    logProgress,
+    logBox,
+    logTable,
+    logTimeTaken,
+    formatObject,
     getIcons
 };

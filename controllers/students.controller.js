@@ -62,7 +62,6 @@ export const searchQRCode = async (req, res) => {
 
 export const getStudentProfile = async (req, res) => {
   try {
-    // Get studentId from either params or query
     const studentId = req.params.studentId || req.query.studentId;
     
     if (!studentId) {
@@ -89,7 +88,6 @@ export const getStudentProfile = async (req, res) => {
 
 export const updateStudentProfile = async (req, res) => {
   try {
-    // Get studentId from either params or query
     const studentId = req.params.studentId || req.query.studentId;
     
     if (!studentId) {
@@ -122,7 +120,6 @@ export const updateStudentProfile = async (req, res) => {
 
 export const getAttendanceHistory = async (req, res) => {
   try {
-    // Get studentId from either params or query
     const studentId = req.params.studentId || req.query.studentId;
     
     if (!studentId) {
@@ -165,43 +162,35 @@ export const getAttendanceHistory = async (req, res) => {
 
 export const getDashboardStats = async (req, res) => {
   try {
-    // Get optional date range filter
     const { startDate, endDate } = req.query;
     
-    // Default to today if no date range provided
     const start = startDate ? new Date(startDate) : new Date();
-    start.setHours(0, 0, 0, 0); // Start of day
+    start.setHours(0, 0, 0, 0); 
     
     const end = endDate ? new Date(endDate) : new Date();
-    end.setHours(23, 59, 59, 999); // End of day
+    end.setHours(23, 59, 59, 999); 
     
-    // Get total student count
     const totalStudents = await Student.countDocuments({ status: 'active' });
     
-    // Get students present today (those with entry time records for today)
     const studentsPresent = await Student.countDocuments({
       'attendanceHistory.entryTime': { $gte: start, $lte: end },
       status: 'active'
     });
     
-    // Get students absent today
     const studentsAbsent = totalStudents - studentsPresent;
     
-    // Get students currently in school (entered but not left)
     const studentsInSchool = await Student.countDocuments({
       'attendanceHistory.entryTime': { $gte: start, $lte: end },
       'attendanceHistory.leaveTime': null,
       status: 'active'
     });
     
-    // Get students who have left (both entered and left)
     const studentsLeft = await Student.countDocuments({
       'attendanceHistory.entryTime': { $gte: start, $lte: end },
       'attendanceHistory.leaveTime': { $ne: null },
       status: 'active'
     });
     
-    // Get attendance over time (last 7 days)
     const last7Days = [];
     for (let i = 6; i >= 0; i--) {
       const day = new Date();
@@ -222,18 +211,15 @@ export const getDashboardStats = async (req, res) => {
       });
     }
     
-    // Calculate attendance rate
     const attendanceRate = totalStudents > 0 
       ? Math.round((studentsPresent / totalStudents) * 100) 
       : 0;
     
-    // Get top 5 students with highest attendance
     const topAttenders = await Student.find({ status: 'active' })
       .select('name indexNumber attendanceCount attendancePercentage')
       .sort({ attendanceCount: -1, attendancePercentage: -1 })
       .limit(5);
     
-    // Return dashboard stats
     res.status(200).json({
       success: true,
       timestamp: new Date(),

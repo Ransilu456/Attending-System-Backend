@@ -7,7 +7,7 @@ int main() {
     PROCESS_INFORMATION pi;
 
 
-    std::string scriptPath = "\"D:\\System\\Both\\backend\\server.js\"";
+    std::string scriptPath = "\"E:\\DO NOT TOUCH\\System\\Attending-System-V8-Backend\\server.js\"";
     std::string command = "node " + scriptPath;
 
     BOOL success = CreateProcessA(

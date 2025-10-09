@@ -138,6 +138,29 @@ const studentSchema = new mongoose.Schema({
     min: [0, 'Percentage cannot be negative'],
     max: [100, 'Percentage cannot exceed 100']
   },
+  messages: [
+  {
+    type: {
+      type: String,
+      enum: ['whatsapp', 'email', 'sms'],
+      default: 'whatsapp'
+    },
+    url: {
+      type: String,
+      trim: true
+    },
+    status: {
+      type: String,
+      enum: ['entered', 'left', 'present', 'absent'],
+      default: 'entered'
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }
+],
+
 }, { 
   timestamps: true,
   toJSON: { virtuals: true },

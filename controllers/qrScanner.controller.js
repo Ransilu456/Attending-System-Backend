@@ -1,7 +1,7 @@
 import Student from '../models/student.model.js';
 import { numericCodeToMongoId } from '../utils/idConverter.js';
 import mongoose from 'mongoose';
-import { sendAttendanceNotification } from '../controllers/messaging.controller.js';
+import { sendAttendanceNotificationLink } from '../controllers/messaging.controller.js';
 
 /**
  * @param {Object}
@@ -50,7 +50,7 @@ export const getStudentQRCode = async (req, res) => {
   } catch (error) {
     console.error('Error retrieving QR code data:', error);
     return res.status(500).json({
-      success: false, 
+      success: false,
       message: 'Failed to retrieve QR code data',
       error: error.message
     });
@@ -81,8 +81,8 @@ export const saveQRCode = async (req, res) => {
     }
 
     // Determine which field to update based on the format of qrData
-    const updateField = typeof qrData === 'string' && qrData.startsWith('data:image') 
-      ? { qrCode: qrData } 
+    const updateField = typeof qrData === 'string' && qrData.startsWith('data:image')
+      ? { qrCode: qrData }
       : { qrCodeData: qrData };
 
     // Find the student and update their QR code data
@@ -120,26 +120,24 @@ export const saveQRCode = async (req, res) => {
 };
 
 /**
- * @param {Object}
- * @param {Object}
+ * @param {Object} req
+ * @param {Object} res
  */
 export const markAttendanceQR = async (req, res) => {
   try {
     const { qrData } = req.body;
 
     if (!qrData) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'QR code data is required' 
+        message: 'QR code data is required'
       });
     }
 
     let studentId;
     try {
-      // Convert numeric QR code to MongoDB ID
       studentId = numericCodeToMongoId(qrData);
-      
-      // Validate if the converted ID is a valid MongoDB ObjectId
+
       if (!mongoose.Types.ObjectId.isValid(studentId)) {
         return res.status(400).json({
           success: false,
@@ -169,18 +167,14 @@ export const markAttendanceQR = async (req, res) => {
       });
     }
 
-    // Get current time
     const now = new Date();
-
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
-    // Find today's attendance record if exists
-    const todayAttendance = student.attendanceHistory?.find(record => 
+
+    const todayAttendance = student.attendanceHistory?.find(record =>
       new Date(record.date).toDateString() === today.toDateString()
     );
 
-    // Determine attendance status
     let status = 'entered';
     if (todayAttendance) {
       if (todayAttendance.status === 'entered' || todayAttendance.status === 'present') {
@@ -193,7 +187,6 @@ export const markAttendanceQR = async (req, res) => {
       }
     }
 
-    // Create attendance record
     const attendanceRecord = {
       date: now,
       status,
@@ -203,29 +196,28 @@ export const markAttendanceQR = async (req, res) => {
       deviceInfo: req.headers['user-agent'] || req.body.deviceInfo || 'Unknown'
     };
 
-    // Update the student document in the database
     const updatedStudent = await Student.findByIdAndUpdate(
       studentId,
       {
         $set: { lastAttendance: now },
-        $inc: { 
-          attendanceCount: (status === 'entered' && (!todayAttendance || todayAttendance.status === 'left')) ? 1 : 0 
+        $inc: {
+          attendanceCount: (status === 'entered' && (!todayAttendance || todayAttendance.status === 'left')) ? 1 : 0
         },
-        ...(todayAttendance 
-          ? { 
-              $set: { 
-                'attendanceHistory.$[elem].status': status,
-                'attendanceHistory.$[elem].leaveTime': status === 'left' ? now : todayAttendance.leaveTime
-              } 
+        ...(todayAttendance
+          ? {
+            $set: {
+              'attendanceHistory.$[elem].status': status,
+              'attendanceHistory.$[elem].leaveTime': status === 'left' ? now : todayAttendance.leaveTime
             }
-          : { 
-              $push: { 
-                attendanceHistory: attendanceRecord 
-              } 
+          }
+          : {
+            $push: {
+              attendanceHistory: attendanceRecord
             }
+          }
         )
       },
-      { 
+      {
         new: true,
         arrayFilters: todayAttendance ? [{ 'elem._id': todayAttendance._id }] : undefined
       }
@@ -238,27 +230,32 @@ export const markAttendanceQR = async (req, res) => {
       });
     }
 
-    let notificationResult = null;
+    const notificationResult = await sendAttendanceNotificationLink(student._id, status, now);
 
-    // Send attendance notification
-    if (student.parent_telephone) {
-      try {
-        notificationResult = await sendAttendanceNotification(
-          student._id,
-          status,
-          now
-        );
-      } catch (notificationError) {
-        console.error('Error sending attendance notification:', notificationError);
-      }
+    if (notificationResult.success && notificationResult.whatsappURL) {
+      await Student.findByIdAndUpdate(studentId, {
+        $push: {
+          messages: {
+            $each: [{
+              type: 'whatsapp',
+              url: notificationResult.whatsappURL,
+              status,
+              createdAt: now
+            }],
+            $slice: -5
+          }
+        }
+      });
     }
 
-    // Get latest WhatsApp message status
-    const latestMessage = student.messages && student.messages.length > 0 
+    const latestMessage = student.messages && student.messages.length > 0
       ? student.messages[student.messages.length - 1]
       : null;
 
-    // Return complete student details with attendance information
+    const finalStudent = await Student.findById(studentId)
+      .select('name indexNumber student_email parent_email parent_telephone address age status attendanceCount attendancePercentage messages')
+      .lean();
+
     return res.status(200).json({
       success: true,
       message: `Student verified and attendance marked successfully: ${student.name} has ${status}`,
@@ -274,12 +271,13 @@ export const markAttendanceQR = async (req, res) => {
           age: student.age,
           status: updatedStudent.status || student.status,
           attendanceCount: updatedStudent.attendanceCount || student.attendanceCount || 0,
-          attendancePercentage: updatedStudent.attendancePercentage || student.attendancePercentage || 0
+          attendancePercentage: updatedStudent.attendancePercentage || student.attendancePercentage || 0,
+          messages: finalStudent.messages || []
         },
         attendance: {
           current: attendanceRecord,
           today: todayAttendance ? {
-            status: status, // Use the updated status
+            status: status,
             entryTime: todayAttendance.entryTime,
             leaveTime: status === 'left' ? now : todayAttendance.leaveTime,
             scanLocation: todayAttendance.scanLocation
@@ -287,41 +285,29 @@ export const markAttendanceQR = async (req, res) => {
           lastAttendance: now,
           attendancePercentage: updatedStudent.attendancePercentage || student.attendancePercentage || 0
         },
-        whatsappNotification: {
-          latest: latestMessage ? {
-            status: latestMessage.status,
-            sentAt: latestMessage.sentAt,
-            type: latestMessage.type
-          } : null,
-          current: notificationResult ? {
-            success: notificationResult.success,
-            status: notificationResult.success ? 'sent' : 'failed',
-            error: notificationResult.error,
-            code: notificationResult.code
-          } : null
-        }
+        whatsappURL: notificationResult.success ? notificationResult.whatsappURL : null
       }
     });
   } catch (error) {
     console.error('Error processing QR code:', error);
-    
-    // Handle specific error types
+
     if (error instanceof mongoose.Error.CastError) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
         message: 'Invalid QR code format',
         details: 'The provided QR code data is not in the correct format'
       });
     }
-    
-    return res.status(500).json({ 
+
+    return res.status(500).json({
       success: false,
-      message: 'Error processing QR code', 
+      message: 'Error processing QR code',
       details: 'An unexpected error occurred while processing the QR code',
       error: error.message
     });
   }
 };
+
 
 export default {
   markAttendanceQR,

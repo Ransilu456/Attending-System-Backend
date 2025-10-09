@@ -9,7 +9,6 @@ export const startScheduler = () => {
       logError(`Error checking past attendance: ${error.message}`);
     });
     
-    // Schedule at 6:45 PM daily
     const scheduleAutoMarkAttendance = () => {
       const now = new Date();
       const targetTime = new Date();
