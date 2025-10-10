@@ -31,6 +31,35 @@ It features:
 
 ---
 
+
+
+## 🧩 Directory Structure
+```js
+📦 Attending-System-V8-Backend
+ ┣ 📂 routes/
+ ┃ ┣ 📜 students.routes.js
+ ┃ ┣ 📜 admin.routes.js
+ ┃ ┣ 📜 qrScanner.routes.js
+ ┃ ┗ 📜 attendance.routes.js
+ ┣ 📂 services/
+ ┃ ┗ 📜 schedulerService.js
+ ┣ 📂 middleware/
+ ┃ ┗ 📜 authMiddleware.js
+ ┣ 📂 config/
+ ┃ ┗ 📜 database.js
+ ┣ 📂 utils/
+ ┃ ┗ 📜 terminal.js
+ ┣ 📂 public/
+ ┃ ┗ 📜 qr-codes/
+ ┣ 📜 server.js
+ ┣ 📜 main.py
+ ┣ 📜 launcher.cpp
+ ┗ 📜 .env
+
+
+```
+ ---
+ 
 ## 🖼️ ASCII Banner
 
 The server proudly displays a custom banner when launched:
@@ -44,3 +73,121 @@ console.log(chalk.cyanBright(`
 ██║  ██║██║  ██║   ██║  ██║   ██║      ██║   ███████╗██║ ╚████║██████╔╝███████╗██║ ╚████║╚██████╗███████╗
 ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝  ╚═╝   ╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═══╝╚═════╝ ╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝
 `));
+```
+
+# ⚙️ Environment Setup
+  **🪄 1. Clone Repository**
+```bash
+git clone https://github.com/yourusername/attending-system-v8-backend.git
+cd attending-system-v8-backend
+```
+
+  **📦 2. Install Dependencies**
+```bash
+npm install
+```
+
+  **⚙️ 3. Create .env File**
+```bash
+PORTS=YOUR_PORTS
+NODE_ENV=DEV
+ENABLE_WEEKEND_ATTENDANCE=FALSE
+```
+
+  **▶ 4. Run Server**
+```bash
+node server.js
+```
+
+  **🩺 5. Test Health Endpoint**
+```bash
+[node server.js](http://localhost:🏅/api/health)
+```
+
+---
+
+# 💻 C++ and Python Launchers
+
+**🐍 Python Launcher**
+Simple subprocess-based launcher with graceful exit.
+
+```python
+import subprocess, os, signal
+
+def main():
+    script_path = r"path"
+    command = ["node", script_path]
+
+    process = subprocess.Popen(command, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+    print("✅ Node.js server running. Press ENTER or Ctrl+C to stop.")
+
+    try:
+        input()
+    except KeyboardInterrupt:
+        print("\n🛑 Stopping...")
+    finally:
+        os.kill(process.pid, signal.CTRL_BREAK_EVENT)
+        print("✅ Node.js server stopped cleanly.")
+
+if __name__ == "__main__":
+    main()
+
+```
+
+**💠 C++ Launcher**
+Native Windows executable for instant backend launch.
+
+```c++
+#include <windows.h>
+#include <iostream>
+#include <string>
+
+int main() {
+    STARTUPINFOA si = { sizeof(si) };
+    PROCESS_INFORMATION pi;
+    std::string command = "node \"E:\\DO NOT TOUCH\\System\\Attending-System-V8-Backend\\server.js\"";
+
+    if (CreateProcessA(NULL, &command[0], NULL, NULL, FALSE, CREATE_NEW_PROCESS_GROUP, NULL, NULL, &si, &pi)) {
+        std::cout << "✅ Node.js backend running. Press ENTER to stop..." << std::endl;
+        std::cin.get();
+        GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pi.dwProcessId);
+        WaitForSingleObject(pi.hProcess, 5000);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+        std::cout << "🛑 Server stopped cleanly." << std::endl;
+    } else {
+        std::cerr << "❌ Failed to start Node.js process." << std::endl;
+    }
+    return 0;
+}
+
+```
+---
+
+# 📦 Tech Stack
+
+| Category       | Technology                 |
+| -------------- | -------------------------- |
+| **Runtime**    | Node.js 18+                |
+| **Framework**  | Express.js                 |
+| **Database**   | MongoDB + Mongoose         |
+| **Scheduler**  | Custom Service Worker      |
+| **Launchers**  | Python & C++ Native        |
+| **Logger**     | Chalk + Custom Terminal UI |
+| **Env Config** | dotenv                     |
+
+
+---
+
+# 🧑‍💻 Author
+
+**Keshan**
+💼 Full-stack Developer & System Architect
+🔗 Building fusion systems combining Node.js, Python, and C++ for next-gen backend UX.
+
+---
+
+# 🪪 License
+
+This project is released under the MIT License.
+You’re not free to use, modify, and distribute — with attribution.
