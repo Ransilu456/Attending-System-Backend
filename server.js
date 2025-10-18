@@ -110,7 +110,6 @@ app.use('/api/public', express.static('public'));
 // Health endpoint
 app.get('/api/health', (req, res) => {
   const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
-  const whatsappStatus = global.whatsappClient?.isReady ? 'connected' : 'disconnected';
 
   res.status(200).json({
     status: 'ok',
@@ -120,10 +119,6 @@ app.get('/api/health', (req, res) => {
         status: dbStatus,
         connection: mongoose.connection.host
       },
-      whatsapp: {
-        status: whatsappStatus,
-        lastConnection: global.whatsappClient?.lastConnectionTime
-      }
     },
     environment: process.env.NODE_ENV,
     version: process.version,
@@ -176,9 +171,6 @@ const startServer = async () => {
     logInfo('GET  /api/health - Health check endpoint');
     logInfo('POST /api/qr/markAttendanceQR - QR code attendance marking');
     logInfo('GET  /api/students/download-qr-code - Download student QR code');
-    logInfo('GET  /api/whatsapp/status - WhatsApp connection status');
-    logInfo('GET  /api/whatsapp/qr - Get WhatsApp QR code');
-    logInfo('POST /api/whatsapp/send - Send WhatsApp message');
 
     // Start server on all network interfaces
     server = app.listen(port, '0.0.0.0', () => {

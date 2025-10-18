@@ -8,9 +8,11 @@ package-lock.json
 *.local
 
 # Build output
+QR System(64bit).exe
 main.exe
 postman.json
 whatsapp-session
+desktop.ini
 
 # Editor directories and files
 .vscode/*
