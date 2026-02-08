@@ -1,8 +1,7 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { protect, isAdmin } from '../middleware/authMiddleware.js';
-import { validateAdminInput } from '../middleware/validationMiddleware.js';
-import { validateStudentInput } from '../middleware/validationMiddleware.js';
+import { validateAdminInput, validateStudentInput, validateStudentUpdateInput } from '../middleware/validationMiddleware.js';
 import {
   registerAdmin,
   loginAdmin,
