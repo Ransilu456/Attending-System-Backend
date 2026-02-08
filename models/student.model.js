@@ -58,21 +58,18 @@ const studentSchema = new mongoose.Schema({
     uppercase: true,
     index: true
   },
-  age: {
-    type: Number,
+  dateOfBirth: {
+    type: Date,
     required: function() {
       return !this._isQRScan; 
     },
-    min: [0, 'Age must be at least 0 years'],
-    max: [100, 'Age cannot exceed 100 years'],
     validate: {
       validator: function(v) {
-        if (v === undefined || v === null) return true;
-        return Number.isInteger(v);
+        if (!v) return true;
+        return v < new Date();
       },
-      message: props => `${props.value} is not a valid age! Age must be an integer.`
-    },
-    default: 0 
+      message: props => `Date of birth must be in the past!`
+    }
   },
   qrCode: {
     type: String,
@@ -175,6 +172,18 @@ studentSchema.pre('save', function(next) {
 });
 
 studentSchema.index({ 'attendanceHistory.date': 1 });
+
+studentSchema.virtual('age').get(function() {
+  if (!this.dateOfBirth) return null;
+  const today = new Date();
+  const birthDate = new Date(this.dateOfBirth);
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+});
 
 studentSchema.virtual('calculateAttendancePercentage').get(function() {
   if (this.attendanceHistory.length === 0) return 0;

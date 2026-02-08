@@ -27,7 +27,7 @@ const router = express.Router();
 // Rate limiters
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, 
+  max: 5,
   message: 'Too many login attempts. Please try again after 15 minutes.'
 });
 
@@ -54,6 +54,7 @@ router.get('/students', protect, isAdmin, getStudents);
 router.get('/students/all', protect, isAdmin, getAllStudents);
 router.post('/students', protect, isAdmin, studentLimiter, validateStudentInput, registerStudent);
 router.put('/students/:id', protect, validateStudentInput, updateStudent);
+router.patch('/students/:id', protect, validateStudentUpdateInput, updateStudent);
 router.delete('/students/:id', protect, isAdmin, deleteStudent);
 
 // QR Code routes

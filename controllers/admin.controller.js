@@ -213,10 +213,10 @@ export const getAllStudents = async (req, res) => {
 
 export const registerStudent = async (req, res) => {
   try {
-    const { name, address, student_email, parent_email, parent_telephone, indexNumber, age } = req.body;
+    const { name, address, student_email, parent_email, parent_telephone, indexNumber, dateOfBirth } = req.body;
 
     // Validate the input
-    if (!name || !address || !student_email || !parent_email || !parent_telephone || !indexNumber || !age) {
+    if (!name || !address || !student_email || !parent_email || !parent_telephone || !indexNumber || !dateOfBirth) {
       return res.status(400).json({ message: 'All fields are required' });
     }
 
@@ -228,7 +228,7 @@ export const registerStudent = async (req, res) => {
       parent_email,
       parent_telephone,
       indexNumber,
-      age
+      dateOfBirth
     });
 
     // Save the student to the database
@@ -237,7 +237,7 @@ export const registerStudent = async (req, res) => {
         try {
           // Generate numeric code from MongoDB ID
           const numericCode = mongoIdToNumericCode(savedStudent._id.toString());
-          
+
           // Generate QR code with the numeric code
           const qrCode = await generateQRCode(numericCode);
 
@@ -452,7 +452,7 @@ export const updateProfile = async (req, res) => {
       userRole: req.admin?.role,
       requestBody: req.body
     });
-    
+
     if (!req.admin || !req.admin._id) {
       return res.status(401).json({ message: 'Authentication required' });
     }
@@ -469,7 +469,7 @@ export const updateProfile = async (req, res) => {
 
     // Update fields
     admin.name = name || admin.name;
-    
+
     // Only update email if it's changed and provided
     if (email && email !== originalEmail) {
       // Check if email already exists for another user
@@ -520,7 +520,7 @@ export const generateStudentQRCode = async (req, res) => {
     res.set('Content-Type', 'image/png');
     res.set('Content-Disposition', `inline; filename="${student.indexNumber}-${student.name}.png"`);
     return res.send(imageBuffer);
-    
+
   } catch (error) {
     console.error('Error generating student QR code:', error);
     return res.status(500).json({ message: 'Failed to generate QR code', error: error.message });
@@ -534,9 +534,9 @@ export const getStudentQRByIndex = async (req, res) => {
     const student = await Student.findOne({ indexNumber: indexNumber.toUpperCase() });
 
     if (!student) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Student not found with the provided index number' 
+        message: 'Student not found with the provided index number'
       });
     }
 
@@ -552,13 +552,13 @@ export const getStudentQRByIndex = async (req, res) => {
     res.set('Content-Type', 'image/png');
     res.set('Content-Disposition', `inline; filename="${student.indexNumber}-${student.name}.png"`);
     return res.send(imageBuffer);
-    
+
   } catch (error) {
     console.error('Error getting student QR code:', error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       success: false,
       message: 'Failed to get QR code',
-      error: error.message 
+      error: error.message
     });
   }
 };
