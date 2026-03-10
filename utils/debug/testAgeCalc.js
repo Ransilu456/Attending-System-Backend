@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import Student from './models/student.model.js';
+import Student from '../../models/student.model.js';
 
 function testAge(dob, expectedAge) {
     const dummyStudent = new Student({ dateOfBirth: new Date(dob) });

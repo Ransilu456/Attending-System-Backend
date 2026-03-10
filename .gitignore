@@ -13,6 +13,7 @@ main.exe
 postman.json
 whatsapp-session
 desktop.ini
+backup_db.js
 
 # Editor directories and files
 .vscode/*
@@ -40,3 +41,4 @@ pnpm-debug.log*
 .Trashes
 ehthumbs.db
 Thumbs.db
+backups
