@@ -211,3 +211,52 @@ export const checkPreviousDayAttendance = async () => {
     throw error;
   }
 };
+
+export const updateStudentStatuses = async () => {
+  try {
+    logInfo('Starting student status update process...');
+
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // Find active students to mark as inactive based on:
+    // 1. Registered > 7 days ago and 0 attendance records
+    // 2. Registered > 30 days ago and <= 1 attendance record
+    const students = await Student.find({
+      status: 'active',
+      $or: [
+        { 
+          attendanceHistory: { $size: 0 }, 
+          createdAt: { $lt: sevenDaysAgo } 
+        },
+        { 
+          attendanceCount: { $lte: 1 }, 
+          createdAt: { $lt: thirtyDaysAgo } 
+        }
+      ]
+    });
+
+    if (!students.length) {
+      logInfo('No students found eligible for inactive status update');
+      return { updatedCount: 0 };
+    }
+
+    logInfo(`Found ${students.length} students to mark as inactive`);
+
+    let updatedCount = 0;
+    for (const student of students) {
+      student.status = 'inactive';
+      await student.save();
+      updatedCount++;
+    }
+
+    logInfo(`Successfully marked ${updatedCount} students as inactive`);
+    return { updatedCount };
+  } catch (error) {
+    logError(`Error in updateStudentStatuses: ${error.message}`);
+    throw error;
+  }
+};

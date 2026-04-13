@@ -252,6 +252,7 @@ export const registerStudent = async (req, res) => {
               name: savedStudent.name,
               indexNumber: savedStudent.indexNumber,
               email: savedStudent.student_email,
+              dateOfBirth: savedStudent.dateOfBirth,
               _id: savedStudent._id
             },
             qrCode

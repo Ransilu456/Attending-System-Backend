@@ -199,7 +199,10 @@ export const markAttendanceQR = async (req, res) => {
     const updatedStudent = await Student.findByIdAndUpdate(
       studentId,
       {
-        $set: { lastAttendance: now },
+        $set: { 
+          lastAttendance: now,
+          status: 'active' // Automatically reactivate on scan
+        },
         $inc: {
           attendanceCount: (status === 'entered' && (!todayAttendance || todayAttendance.status === 'left')) ? 1 : 0
         },

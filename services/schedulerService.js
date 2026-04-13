@@ -1,5 +1,5 @@
 import { logInfo, logError } from '../utils/terminal.js';
-import { autoMarkLeaveAttendance, checkAllPastAttendance } from './autoAttendanceService.js';
+import { autoMarkLeaveAttendance, checkAllPastAttendance, updateStudentStatuses } from './autoAttendanceService.js';
 
 
 export const startScheduler = () => {
@@ -24,6 +24,7 @@ export const startScheduler = () => {
       setTimeout(async () => {
         try {
           await autoMarkLeaveAttendance();
+          await updateStudentStatuses();
         } catch (error) {
           logError(`Error in scheduled auto-mark attendance task: ${error.message}`);
         }
