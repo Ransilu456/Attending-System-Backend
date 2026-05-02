@@ -144,25 +144,38 @@ export const getScannedStudentsToday = async (req, res) => {
       currentTime: now.toJSDate()
     });
 
-    const students = await Student.find({
-      "attendanceHistory": {
-        $elemMatch: {
-          date: {
-            $gte: startOfDay,
-            $lte: endOfDay
-          }
+    const students = await Student.aggregate([
+      {
+        $match: {
+          "attendanceHistory.date": { $gte: startOfDay, $lte: endOfDay }
+        }
+      },
+      {
+        $project: {
+          name: 1,
+          indexNumber: 1,
+          student_email: 1,
+          status: 1,
+          todayAttendance: {
+            $filter: {
+              input: "$attendanceHistory",
+              as: "record",
+              cond: {
+                $and: [
+                  { $gte: ["$$record.date", startOfDay] },
+                  { $lte: ["$$record.date", endOfDay] }
+                ]
+              }
+            }
+          },
+          lastMessage: { $slice: ["$messages", -1] }
         }
       }
-    }).select('name indexNumber student_email attendanceHistory status messages');
-
-    console.log(`Found ${students.length} students with attendance records for today`);
+    ]);
 
     const processedStudents = students.map(student => {
-      const todayRecords = student.attendanceHistory.filter(record => {
-        const recordDate = new Date(record.date);
-        return recordDate >= startOfDay && recordDate <= endOfDay;
-      });
-
+      const todayRecords = student.todayAttendance || [];
+      
       const latestRecord = todayRecords.length > 0
         ? todayRecords.reduce((latest, current) => {
           return new Date(current.date) > new Date(latest.date) ? current : latest;
@@ -178,9 +191,7 @@ export const getScannedStudentsToday = async (req, res) => {
         entryTime: latestRecord?.entryTime || null,
         leaveTime: latestRecord?.leaveTime || null,
         date: latestRecord?.date || null,
-        messageStatus: student.messages?.length > 0
-          ? student.messages[student.messages.length - 1].status
-          : null,
+        messageStatus: student.lastMessage?.[0]?.status || null,
         attendanceHistory: todayRecords,
       };
     });
@@ -229,24 +240,36 @@ export const getAttendanceByDate = async (req, res) => {
       endOfDay
     });
 
-    const students = await Student.find({
-      "attendanceHistory": {
-        $elemMatch: {
-          date: {
-            $gte: startOfDay,
-            $lte: endOfDay
+    const students = await Student.aggregate([
+      {
+        $match: {
+          "attendanceHistory.date": { $gte: startOfDay, $lte: endOfDay }
+        }
+      },
+      {
+        $project: {
+          name: 1,
+          indexNumber: 1,
+          student_email: 1,
+          status: 1,
+          dateAttendance: {
+            $filter: {
+              input: "$attendanceHistory",
+              as: "record",
+              cond: {
+                $and: [
+                  { $gte: ["$$record.date", startOfDay] },
+                  { $lte: ["$$record.date", endOfDay] }
+                ]
+              }
+            }
           }
         }
       }
-    }).select('name indexNumber student_email attendanceHistory status messages');
-
-    console.log(`Found ${students.length} students with attendance records for ${date}`);
+    ]);
 
     const processedStudents = students.map(student => {
-      const dateRecords = student.attendanceHistory.filter(record => {
-        const recordDate = new Date(record.date);
-        return recordDate >= startOfDay && recordDate <= endOfDay;
-      });
+      const dateRecords = student.dateAttendance || [];
 
       const latestRecord = dateRecords.length > 0
         ? dateRecords.reduce((latest, current) => {
@@ -316,60 +339,108 @@ export const getStudentAttendanceHistory = async (req, res) => {
       });
     }
 
-    const student = await Student.findById(studentId)
-      .select('name indexNumber student_email attendanceHistory attendancePercentage');
+    const limitVal = parseInt(limit);
+    const offsetVal = parseInt(offset);
 
-    if (!student) {
+    // Use aggregation to paginate history at the database level
+    const [result] = await Student.aggregate([
+      { $match: { _id: new mongoose.Types.ObjectId(studentId) } },
+      {
+        $project: {
+          name: 1,
+          indexNumber: 1,
+          student_email: 1,
+          attendancePercentage: 1,
+          // Filter history first if dates provided
+          filteredHistory: {
+            $filter: {
+              input: "$attendanceHistory",
+              as: "record",
+              cond: {
+                $and: [
+                  startDate ? { $gte: ["$$record.date", new Date(startDate)] } : true,
+                  endDate ? { $lte: ["$$record.date", new Date(new Date(endDate).setHours(23, 59, 59, 999))] } : true
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          name: 1,
+          indexNumber: 1,
+          student_email: 1,
+          attendancePercentage: 1,
+          totalRecords: { $size: "$filteredHistory" },
+          stats: {
+            presentCount: {
+              $size: {
+                $filter: {
+                  input: "$filteredHistory",
+                  as: "r",
+                  cond: { $in: ["$$r.status", ["present", "entered"]] }
+                }
+              }
+            },
+            absentCount: {
+              $size: {
+                $filter: {
+                  input: "$filteredHistory",
+                  as: "r",
+                  cond: { $eq: ["$$r.status", "absent"] }
+                }
+              }
+            },
+            leftCount: {
+              $size: {
+                $filter: {
+                  input: "$filteredHistory",
+                  as: "r",
+                  cond: { $eq: ["$$r.status", "left"] }
+                }
+              }
+            }
+          },
+          // Slice the history array for pagination
+          paginatedHistory: {
+            $slice: [
+              { $reverseArray: "$filteredHistory" }, // Usually want latest first
+              offsetVal,
+              limitVal
+            ]
+          }
+        }
+      }
+    ]);
+
+    if (!result) {
       return res.status(404).json({
         success: false,
         message: 'Student not found'
       });
     }
 
-    console.log(`Fetching attendance history for student: ${student.name} (${studentId})`);
+    console.log(`Found ${result.totalRecords} attendance records, returning ${result.paginatedHistory.length}`);
 
-    let filteredHistory = [...student.attendanceHistory];
-    
-    if (startDate) {
-      const startDateTime = new Date(startDate);
-      filteredHistory = filteredHistory.filter(record => 
-        new Date(record.date) >= startDateTime
-      );
-    }
-    
-    if (endDate) {
-      const endDateTime = new Date(endDate);
-      endDateTime.setHours(23, 59, 59, 999);
-      filteredHistory = filteredHistory.filter(record => 
-        new Date(record.date) <= endDateTime
-      );
-    }
-
-    const sortModifier = sortOrder.toLowerCase() === 'asc' ? 1 : -1;
-    filteredHistory.sort((a, b) => {
-      if (sortBy === 'date') {
-        return sortModifier * (new Date(b.date) - new Date(a.date));
+    return res.status(200).json({
+      success: true,
+      data: {
+        student: {
+          _id: result._id,
+          name: result.name,
+          indexNumber: result.indexNumber,
+          student_email: result.student_email
+        },
+        attendanceHistory: result.paginatedHistory,
+        totalRecords: result.totalRecords,
+        stats: {
+          ...result.stats,
+          totalCount: result.totalRecords,
+          attendancePercentage: result.attendancePercentage || 0
+        }
       }
-      return 0;
     });
-
-    const totalRecords = filteredHistory.length;
-    const presentCount = filteredHistory.filter(
-      record => record.status === 'present' || record.status === 'entered'
-    ).length;
-    const absentCount = filteredHistory.filter(
-      record => record.status === 'absent'
-    ).length;
-    const leftCount = filteredHistory.filter(
-      record => record.status === 'left'
-    ).length;
-
-    const paginatedRecords = filteredHistory.slice(
-      parseInt(offset), 
-      parseInt(offset) + parseInt(limit)
-    );
-
-    console.log(`Found ${totalRecords} attendance records, returning ${paginatedRecords.length}`);
 
     return res.status(200).json({
       success: true,

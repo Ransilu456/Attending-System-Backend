@@ -119,10 +119,44 @@ export const getAdminDetails = async (req, res) => {
 
 export const getStudents = async (req, res) => {
   try {
-    const students = await Student.find();
-    res.status(200).json({ students });
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+    const search = req.query.search || '';
+
+    let query = {};
+    if (search) {
+      query = {
+        $or: [
+          { name: { $regex: search, $options: 'i' } },
+          { indexNumber: { $regex: search, $options: 'i' } },
+          { student_email: { $regex: search, $options: 'i' } }
+        ]
+      };
+    }
+
+    const students = await Student.find(query)
+      .select('-attendanceHistory -messages')
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const totalStudents = await Student.countDocuments(query);
+
+    res.status(200).json({ 
+      success: true,
+      students,
+      pagination: {
+        total: totalStudents,
+        page,
+        limit,
+        pages: Math.ceil(totalStudents / limit)
+      }
+    });
   } catch (err) {
-    res.status(500).json({ message: 'Error fetching students', error: err });
+    console.error('Error fetching students:', err);
+    res.status(500).json({ message: 'Error fetching students', error: err.message });
   }
 };
 
@@ -170,44 +204,16 @@ export const deleteStudent = async (req, res) => {
 
 export const getAllStudents = async (req, res) => {
   try {
-    // Fetch all students
-    const students = await Student.find();
-
-    // Process each student to ensure lastAttendance is set correctly
-    const processedStudents = await Promise.all(students.map(async (student) => {
-      // Convert to plain object so we can modify it
-      const studentObj = student.toObject();
-
-      // If the student has attendance records but lastAttendance is not set
-      if (studentObj.attendanceHistory && studentObj.attendanceHistory.length > 0 && !studentObj.lastAttendance) {
-        // Find the most recent attendance record
-        const sortedAttendance = [...studentObj.attendanceHistory].sort(
-          (a, b) => DateTime.fromJSDate(b.date).ts - DateTime.fromJSDate(a.date).ts
-        );
-
-        // Set lastAttendance to the date of the most recent record
-        if (sortedAttendance.length > 0) {
-          // Update the student in the database
-          await Student.findByIdAndUpdate(
-            studentObj._id,
-            { lastAttendance: sortedAttendance[0].date }
-          );
-
-          // Update the object we're returning
-          studentObj.lastAttendance = sortedAttendance[0].date;
-        }
-      }
-
-      return studentObj;
-    }));
+    // Fetch all students but exclude heavy history and messages arrays
+    const students = await Student.find().select('-attendanceHistory -messages').lean();
 
     res.status(200).json({
       message: "All students fetched successfully.",
-      students: processedStudents,
+      students: students,
     });
   } catch (error) {
     console.error('Error fetching all students:', error);
-    res.status(500).json({ message: 'Error fetching all students', error });
+    res.status(500).json({ message: 'Error fetching all students', error: error.message });
   }
 };
 
@@ -578,35 +584,45 @@ export const getRecentAttendance = async (req, res) => {
     });
 
     // Find students with attendance records for today
-    const students = await Student.find({
-      "attendanceHistory": {
-        $elemMatch: {
-          date: {
-            $gte: startOfDay,
-            $lte: endOfDay
-          }
+    const students = await Student.aggregate([
+      {
+        $match: {
+          "attendanceHistory.date": { $gte: startOfDay, $lte: endOfDay }
+        }
+      },
+      {
+        $project: {
+          name: 1,
+          indexNumber: 1,
+          student_email: 1,
+          status: 1,
+          todayAttendance: {
+            $filter: {
+              input: "$attendanceHistory",
+              as: "record",
+              cond: {
+                $and: [
+                  { $gte: ["$$record.date", startOfDay] },
+                  { $lte: ["$$record.date", endOfDay] }
+                ]
+              }
+            }
+          },
+          lastMessage: { $slice: ["$messages", -1] }
         }
       }
-    })
-      .select('name indexNumber student_email attendanceHistory status messages')
-      .lean();
+    ]);
 
-    // Process attendance records
+    // Process records in memory (much smaller set now)
     const processedRecords = students.map(student => {
-      // Find today's attendance records
-      const todayRecords = student.attendanceHistory.filter(record => {
-        const recordDate = new Date(record.date);
-        return recordDate >= startOfDay && recordDate <= endOfDay;
-      });
-
-      // Get the most recent record
+      const todayRecords = student.todayAttendance || [];
+      
       const latestRecord = todayRecords.length > 0
         ? todayRecords.reduce((latest, current) => {
           return new Date(current.date) > new Date(latest.date) ? current : latest;
         })
         : null;
 
-      // Format the record for display
       return {
         _id: student._id,
         name: student.name,
@@ -616,10 +632,7 @@ export const getRecentAttendance = async (req, res) => {
         entryTime: latestRecord?.entryTime || null,
         leaveTime: latestRecord?.leaveTime || null,
         timestamp: latestRecord?.date || null,
-        // Include message status if available
-        messageStatus: student.messages?.length > 0
-          ? student.messages[student.messages.length - 1].status
-          : null
+        messageStatus: student.lastMessage?.[0]?.status || null
       };
     });
 

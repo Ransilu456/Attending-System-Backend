@@ -172,6 +172,8 @@ studentSchema.pre('save', function(next) {
 });
 
 studentSchema.index({ 'attendanceHistory.date': 1 });
+studentSchema.index({ createdAt: -1 });
+studentSchema.index({ status: 1 });
 
 studentSchema.virtual('age').get(function() {
   if (!this.dateOfBirth) return null;
@@ -186,7 +188,7 @@ studentSchema.virtual('age').get(function() {
 });
 
 studentSchema.virtual('calculateAttendancePercentage').get(function() {
-  if (this.attendanceHistory.length === 0) return 0;
+  if (!this.attendanceHistory || this.attendanceHistory.length === 0) return 0;
   const presentCount = this.attendanceHistory.filter(record => record.status === 'present').length;
   return (presentCount / this.attendanceHistory.length) * 100;
 });

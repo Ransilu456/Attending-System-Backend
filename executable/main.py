@@ -3,7 +3,7 @@ import os
 import signal
 
 def main():
-    script_path = r"E:\DO NOT TOUCH\System\Attending-System-V8-Backend\server.js"
+    script_path = r"E:\DO NOT TOUCH\System\Backend\server.js"
     command = ["node", script_path]
 
     process = None

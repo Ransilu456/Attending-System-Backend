@@ -1,0 +1,1 @@
+pyinstaller --onefile --icon="..\assets\Logo.ico" main.py
