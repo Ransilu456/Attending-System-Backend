@@ -1,14 +1,15 @@
 #👌 WELCOME TO 😊
 
-██████╗ ██████╗     █████╗ ████████╗████████╗███████╗███╗   ██╗██████╗ ███████╗███╗   ██╗ ██████╗███████╗
-██╔══██╗██╔══██╗   ██╔══██╗╚══██╔══╝╚══██╔══╝██╔════╝████╗  ██║██╔══██╗██╔════╝████╗  ██║██╔════╝██╔════╝
-██████╔╝██████╔╝   ███████║   ██║      ██║   █████╗  ██╔██╗ ██║██║  ██║█████╗  ██╔██╗ ██║██║     █████╗  
-██╔══██╗██╔══██╗   ██╔══██║   ██║      ██║   ██╔══╝  ██║╚██╗██║██║  ██║██╔══╝  ██║╚██╗██║██║     ██╔══╝  
-██║  ██║██║  ██║   ██║  ██║   ██║      ██║   ███████╗██║ ╚████║██████╔╝███████╗██║ ╚████║╚██████╗███████╗
-╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝  ╚═╝   ╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═══╝╚═════╝ ╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝
+     █████╗ ██████╗     █████╗ ████████╗████████╗███████╗███╗   ██╗██████╗ ███████╗███╗   ██╗ ██████╗███████╗
+    ██╔══██╗██╔══██╗   ██╔══██╗╚══██╔══╝╚══██╔══╝██╔════╝████╗  ██║██╔══██╗██╔════╝████╗  ██║██╔════╝██╔════╝
+    ██║  ██║██████╔╝   ███████║   ██║      ██║   █████╗  ██╔██╗ ██║██║  ██║█████╗  ██╔██╗ ██║██║     █████╗  
+    ██║ █╗█║██╔══██╗   ██╔══██║   ██║      ██║   ██╔══╝  ██║╚██╗██║██║  ██║██╔══╝  ██║╚██╗██║██║     ██╔══╝  
+    ╚█████╔╝██║  ██║   ██║  ██║   ██║      ██║   ███████╗██║ ╚████║██████╔╝███████╗██║ ╚████║╚██████╗███████╗
+     ╚═══╝╚╝╚═╝  ╚═╝   ╚═╝  ╚═╝   ╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═══╝╚═════╝ ╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝
+    
 
 
-# 🧠 Attending-System V8 Backend
+# 🧠 Attending-System Backend
 
 ![Node.js](https://img.shields.io/badge/Node.js-18.x-brightgreen?logo=node.js)
 ![Express](https://img.shields.io/badge/Express.js-black?logo=express)
@@ -21,7 +22,7 @@
 
 ## 🚀 Overview
 
-**Attending-System V8 Backend** powers an intelligent, secure, and real-time attendance tracking platform.  
+**Attending-System Backend** powers an intelligent, secure, and real-time attendance tracking platform.  
 It features:
 - Robust API architecture with modular routing.  
 - Optimized CORS & middleware configuration.  
@@ -32,10 +33,9 @@ It features:
 ---
 
 
-
 ## 🧩 Directory Structure
 ```js
-📦 Attending-System-V8-Backend
+📦 Attending-System-Backend
  ┣ 📂 routes/
  ┃ ┣ 📜 students.routes.js
  ┃ ┣ 📜 admin.routes.js
@@ -66,42 +66,14 @@ The server proudly displays a custom banner when launched:
 
 ```js
 console.log(chalk.cyanBright(`
-██████╗ ██████╗     █████╗ ████████╗████████╗███████╗███╗   ██╗██████╗ ███████╗███╗   ██╗ ██████╗███████╗
-██╔══██╗██╔══██╗   ██╔══██╗╚══██╔══╝╚══██╔══╝██╔════╝████╗  ██║██╔══██╗██╔════╝████╗  ██║██╔════╝██╔════╝
-██████╔╝██████╔╝   ███████║   ██║      ██║   █████╗  ██╔██╗ ██║██║  ██║█████╗  ██╔██╗ ██║██║     █████╗  
-██╔══██╗██╔══██╗   ██╔══██║   ██║      ██║   ██╔══╝  ██║╚██╗██║██║  ██║██╔══╝  ██║╚██╗██║██║     ██╔══╝  
-██║  ██║██║  ██║   ██║  ██║   ██║      ██║   ███████╗██║ ╚████║██████╔╝███████╗██║ ╚████║╚██████╗███████╗
-╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝  ╚═╝   ╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═══╝╚═════╝ ╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝
+     █████╗ ██████╗     █████╗ ████████╗████████╗███████╗███╗   ██╗██████╗ ███████╗███╗   ██╗ ██████╗███████╗
+    ██╔══██╗██╔══██╗   ██╔══██╗╚══██╔══╝╚══██╔══╝██╔════╝████╗  ██║██╔══██╗██╔════╝████╗  ██║██╔════╝██╔════╝
+    ██║  ██║██████╔╝   ███████║   ██║      ██║   █████╗  ██╔██╗ ██║██║  ██║█████╗  ██╔██╗ ██║██║     █████╗  
+    ██║ █╗█║██╔══██╗   ██╔══██║   ██║      ██║   ██╔══╝  ██║╚██╗██║██║  ██║██╔══╝  ██║╚██╗██║██║     ██╔══╝  
+    ╚█████╔╝██║  ██║   ██║  ██║   ██║      ██║   ███████╗██║ ╚████║██████╔╝███████╗██║ ╚████║╚██████╗███████╗
+     ╚═══╝╚╝╚═╝  ╚═╝   ╚═╝  ╚═╝   ╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═══╝╚═════╝ ╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝
+    
 `));
-```
-
-# ⚙️ Environment Setup
-  **🪄 1. Clone Repository**
-```bash
-git clone https://github.com/yourusername/attending-system-v8-backend.git
-cd attending-system-v8-backend
-```
-
-  **📦 2. Install Dependencies**
-```bash
-npm install
-```
-
-  **⚙️ 3. Create .env File**
-```bash
-PORTS=YOUR_PORTS
-NODE_ENV=DEV
-ENABLE_WEEKEND_ATTENDANCE=FALSE
-```
-
-  **▶ 4. Run Server**
-```bash
-node server.js
-```
-
-  **🩺 5. Test Health Endpoint**
-```bash
-[node server.js](http://localhost:🏅/api/health)
 ```
 
 ---
@@ -145,7 +117,7 @@ Native Windows executable for instant backend launch.
 int main() {
     STARTUPINFOA si = { sizeof(si) };
     PROCESS_INFORMATION pi;
-    std::string command = "node \"E:\\DO NOT TOUCH\\System\\Attending-System-V8-Backend\\server.js\"";
+    std::string command = "file_path";
 
     if (CreateProcessA(NULL, &command[0], NULL, NULL, FALSE, CREATE_NEW_PROCESS_GROUP, NULL, NULL, &si, &pi)) {
         std::cout << "✅ Node.js backend running. Press ENTER to stop..." << std::endl;
@@ -182,7 +154,7 @@ int main() {
 # 🧑‍💻 Author
 
 **Keshan**
-💼 Full-stack Developer & System Architect
+💼 Full-stack Developer
 🔗 Building fusion systems combining Node.js, Python, and C++ for next-gen backend UX.
 
 ---
