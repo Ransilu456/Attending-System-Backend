@@ -134,38 +134,71 @@ export const markAttendanceQR = async (req, res) => {
       });
     }
 
-    let studentId;
-    try {
-      studentId = numericCodeToMongoId(qrData);
+    let student = null;
+    let studentId = null;
+    let code = '';
 
-      if (!mongoose.Types.ObjectId.isValid(studentId)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid QR code format',
-          details: 'Please scan a valid numeric QR code'
-        });
-      }
-    } catch (error) {
+    if (typeof qrData === 'string') {
+      code = qrData.trim();
+    } else if (qrData && typeof qrData === 'object') {
+      code = (qrData.studentId || qrData._id || qrData.id || qrData.qrToken || qrData.indexNumber || '').toString().trim();
+    }
+
+    if (!code) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid QR code format',
-        details: 'The QR code could not be converted to a valid student ID'
+        message: 'Invalid QR code data structure'
       });
     }
 
-    console.log(`Processing QR code for student ID: ${studentId}`);
+    // 1. Try secure token format (32-character hex)
+    if (/^[0-9a-fA-F]{32}$/.test(code)) {
+      console.log(`Searching student by secure token: ${code}`);
+      student = await Student.findOne({ qrToken: code })
+        .select('name indexNumber student_email parent_email parent_telephone address age status attendanceHistory messages lastAttendance attendancePercentage attendanceCount')
+        .lean();
+    }
 
-    const student = await Student.findById(studentId)
-      .select('name indexNumber student_email parent_email parent_telephone address age status attendanceHistory messages lastAttendance attendancePercentage attendanceCount')
-      .lean();
+    // 2. Try raw MongoDB ID format (24-character hex)
+    if (!student && /^[0-9a-fA-F]{24}$/.test(code)) {
+      console.log(`Searching student by raw ObjectId: ${code}`);
+      student = await Student.findById(code)
+        .select('name indexNumber student_email parent_email parent_telephone address age status attendanceHistory messages lastAttendance attendancePercentage attendanceCount')
+        .lean();
+    }
+
+    // 3. Try space-separated numeric format converting to MongoId
+    if (!student && /^\d{4}(\s+\d{4}){7}$/.test(code)) {
+      try {
+        const idFromCode = numericCodeToMongoId(code);
+        if (mongoose.Types.ObjectId.isValid(idFromCode)) {
+          console.log(`Searching student by numeric code converted to ID: ${idFromCode}`);
+          student = await Student.findById(idFromCode)
+            .select('name indexNumber student_email parent_email parent_telephone address age status attendanceHistory messages lastAttendance attendancePercentage attendanceCount')
+            .lean();
+        }
+      } catch (err) {
+        console.error('Failed to convert numeric code:', err);
+      }
+    }
+
+    // 4. Fallback search by indexNumber
+    if (!student) {
+      console.log(`Searching student by index number fallback: ${code}`);
+      student = await Student.findOne({ indexNumber: code.toUpperCase() })
+        .select('name indexNumber student_email parent_email parent_telephone address age status attendanceHistory messages lastAttendance attendancePercentage attendanceCount')
+        .lean();
+    }
 
     if (!student) {
       return res.status(404).json({
         success: false,
         message: 'Student not found',
-        details: 'No student found with the provided QR code'
+        details: 'No student found matching the provided QR code'
       });
     }
+
+    studentId = student._id;
 
     const now = new Date();
     const today = new Date();

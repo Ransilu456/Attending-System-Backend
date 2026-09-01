@@ -39,7 +39,7 @@ const studentLimiter = rateLimit({
 // Authentication routes
 router.post('/register', validateAdminInput, registerAdmin);
 router.post('/login', loginLimiter, loginAdmin);
-router.post('/logout', protect, logoutAdmin);
+router.post('/logout', logoutAdmin);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password/:token', resetPassword);
 router.post('/update-password', protect, updatePassword);

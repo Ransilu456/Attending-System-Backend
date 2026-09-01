@@ -8,10 +8,13 @@ import studentRoutes from './routes/students.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import qrScannerRoutes from './routes/qrScanner.routes.js';
 import attendanceRoutes from './routes/attendance.routes.js';
+import developerRoutes from './routes/developer.routes.js';
+import notificationRoutes from './routes/notifications.routes.js';
 import mongoose from 'mongoose';
 import { startScheduler } from './services/schedulerService.js';
 
 import { errorHandler } from './middleware/authMiddleware.js';
+import { requestLogger, initRequestLogger, shutdownRequestLogger } from './middleware/requestLogger.js';
 import { printBanner, logInfo, logSuccess, logWarning, logError, logSection, logServerStart, startSpinner, succeedSpinner, stopSpinner } from './utils/terminal.js';
 import { connectDB, closeDB } from './config/database.js';
 
@@ -35,6 +38,8 @@ const allowedOrigins = [
   'http://127.0.0.1:5173',
   'http://localhost:4173',
   'http://127.0.0.1:4173',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
   process.env.CLIENT_URL
 ].filter(Boolean);
 
@@ -100,11 +105,16 @@ app.use(bodyParser.json({
 
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
+// Request logger (dev monitoring — captures device, identity, timing)
+app.use(requestLogger);
+
 // API routes
 app.use('/api/students', studentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/qr', qrScannerRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/developer', developerRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/public', express.static('public'));
 
 // Health endpoint
@@ -162,6 +172,9 @@ const startServer = async () => {
     logSection('Database');
     await connectDB();
     succeedSpinner('db', 'Connected to MongoDB successfully');
+
+    // Initialize request logger (loads config + existing logs)
+    initRequestLogger();
 /*
     initializeWhatsApp().catch(err => {
       console.error('WhatsApp initialization failed:', err);
@@ -202,6 +215,7 @@ const startServer = async () => {
     // Graceful shutdown handler
     const gracefulShutdown = (signal) => {
       logWarning(`Received ${signal} signal. Shutting down gracefully...`);
+      shutdownRequestLogger();
 
       if (!server || server.listening === false) {
         logWarning('Server not running, proceeding to close database');

@@ -226,6 +226,9 @@ export const registerStudent = async (req, res) => {
       return res.status(400).json({ message: 'All fields are required' });
     }
 
+    // Generate secure random token
+    const qrToken = crypto.randomBytes(16).toString('hex');
+
     // Create a new student instance
     const newStudent = new Student({
       name,
@@ -234,18 +237,16 @@ export const registerStudent = async (req, res) => {
       parent_email,
       parent_telephone,
       indexNumber,
-      dateOfBirth
+      dateOfBirth,
+      qrToken
     });
 
     // Save the student to the database
     await newStudent.save()
       .then(async (savedStudent) => {
         try {
-          // Generate numeric code from MongoDB ID
-          const numericCode = mongoIdToNumericCode(savedStudent._id.toString());
-
-          // Generate QR code with the numeric code
-          const qrCode = await generateQRCode(numericCode);
+          // Generate QR code with the secure token instead of DB ID
+          const qrCode = await generateQRCode(savedStudent.qrToken);
 
           // Update the saved student with the QR code
           savedStudent.qrCode = qrCode;
@@ -515,11 +516,14 @@ export const generateStudentQRCode = async (req, res) => {
       return res.status(404).json({ message: 'Student not found' });
     }
 
-    // Generate numeric code from MongoDB ID
-    const numericCode = mongoIdToNumericCode(student._id.toString());
+    // Generate QR code using qrToken (secure) or fallback to numericCode for backward compatibility
+    let codeToEncode = student.qrToken;
+    if (!codeToEncode) {
+      codeToEncode = mongoIdToNumericCode(student._id.toString());
+    }
 
-    // Generate QR code with the numeric code
-    const qrCode = await generateQRCode(numericCode);
+    // Generate QR code with the token/code
+    const qrCode = await generateQRCode(codeToEncode);
 
     const base64Data = qrCode.replace(/^data:image\/png;base64,/, '');
     const imageBuffer = Buffer.from(base64Data, 'base64');
@@ -547,11 +551,14 @@ export const getStudentQRByIndex = async (req, res) => {
       });
     }
 
-    // Generate numeric code from MongoDB ID
-    const numericCode = mongoIdToNumericCode(student._id.toString());
+    // Generate QR code using qrToken (secure) or fallback to numericCode for backward compatibility
+    let codeToEncode = student.qrToken;
+    if (!codeToEncode) {
+      codeToEncode = mongoIdToNumericCode(student._id.toString());
+    }
 
-    // Generate QR code with the numeric code
-    const qrCode = await generateQRCode(numericCode);
+    // Generate QR code with the token/code
+    const qrCode = await generateQRCode(codeToEncode);
 
     const base64Data = qrCode.replace(/^data:image\/png;base64,/, '');
     const imageBuffer = Buffer.from(base64Data, 'base64');

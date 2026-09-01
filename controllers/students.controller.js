@@ -1,4 +1,7 @@
 import Student from '../models/student.model.js';
+import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
+dotenv.config();
 
 export const downloadQRCode = async (req, res) => {
   try {
@@ -249,5 +252,184 @@ export const getDashboardStats = async (req, res) => {
       message: 'Error retrieving dashboard statistics', 
       error: error.message 
     });
+  }
+};
+
+// ─── Student Login (email + indexNumber) ─────────────────────
+export const studentLogin = async (req, res) => {
+  try {
+    const { student_email, indexNumber } = req.body;
+
+    if (!student_email || !indexNumber) {
+      return res.status(400).json({ message: 'Email and index number are required.' });
+    }
+
+    const student = await Student.findOne({
+      student_email: student_email.toLowerCase().trim(),
+      indexNumber: indexNumber.toUpperCase().trim()
+    });
+
+    if (!student) {
+      return res.status(401).json({ message: 'No student found with this email and index number combination.' });
+    }
+
+    if (student.status !== 'active') {
+      return res.status(401).json({ message: 'Your account is not active. Please contact support.' });
+    }
+
+    const token = jwt.sign(
+      { id: student._id, role: 'student', indexNumber: student.indexNumber },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    const effectivePresent = student.attendanceHistory.filter(
+      r => r.status === 'present' || r.status === 'entered' || r.status === 'left'
+    ).length;
+    const attendancePercentage = student.attendanceHistory.length > 0
+      ? (effectivePresent / student.attendanceHistory.length) * 100
+      : 0;
+
+    res.status(200).json({
+      message: 'Login successful',
+      token,
+      student: {
+        _id: student._id,
+        name: student.name,
+        indexNumber: student.indexNumber,
+        student_email: student.student_email,
+        address: student.address,
+        attendancePercentage,
+        attendanceCount: student.attendanceCount,
+        status: student.status,
+        lastAttendance: student.lastAttendance,
+        profileImage: student.profileImage,
+      }
+    });
+  } catch (error) {
+    console.error('Student login error:', error);
+    res.status(500).json({ message: 'Error during login', error: error.message });
+  }
+};
+
+// ─── Get My Profile (requires student JWT via verifyStudent middleware) ──────
+export const getMyProfile = async (req, res) => {
+  try {
+    const student = await Student.findById(req.student._id).select('-qrCode');
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+    res.status(200).json({
+      message: 'Profile retrieved successfully',
+      student
+    });
+  } catch (error) {
+    console.error('Error fetching student profile:', error);
+    res.status(500).json({ message: 'Error fetching student profile', error: error.message });
+  }
+};
+
+// ─── Update My Profile (protected, whitelisted fields only) ──────────────────
+export const updateMyProfile = async (req, res) => {
+  try {
+    // Strict whitelist — students may only touch these fields
+    const ALLOWED_FIELDS = [
+      'name', 'student_email', 'address',
+      'parent_email', 'parent_telephone', 'dateOfBirth', 'profileImage',
+    ];
+
+    const updates = {};
+    for (const field of ALLOWED_FIELDS) {
+      if (req.body[field] !== undefined) {
+        if (field === 'dateOfBirth' && !req.body[field]) {
+          updates[field] = null;
+        } else {
+          updates[field] = req.body[field];
+        }
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ message: 'No valid fields provided for update.' });
+    }
+
+    const student = await Student.findByIdAndUpdate(
+      req.student._id,
+      { $set: updates },
+      { new: true, runValidators: true }
+    ).select('-qrCode -qrToken -attendanceHistory -messages');
+
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    res.status(200).json({
+      message: 'Profile updated successfully',
+      student,
+    });
+  } catch (error) {
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map((e) => e.message);
+      return res.status(400).json({ message: messages.join(', ') });
+    }
+    console.error('Error updating student profile:', error);
+    res.status(500).json({ message: 'Error updating profile', error: error.message });
+  }
+};
+
+// ─── Get My Attendance (protected, returns full attendance history) ───────────
+export const getMyAttendance = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    const student = await Student.findById(req.student._id)
+      .select('name indexNumber attendanceHistory attendancePercentage attendanceCount lastAttendance status');
+
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    let history = [...student.attendanceHistory];
+
+    if (startDate) {
+      const start = new Date(startDate);
+      history = history.filter(r => new Date(r.date) >= start);
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      history = history.filter(r => new Date(r.date) <= end);
+    }
+
+    // Sort descending by date
+    history.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    const stats = {
+      totalCount: student.attendanceHistory.length,
+      presentCount: student.attendanceHistory.filter(r => r.status === 'present' || r.status === 'entered').length,
+      absentCount: student.attendanceHistory.filter(r => r.status === 'absent').length,
+      leftCount: student.attendanceHistory.filter(r => r.status === 'left').length,
+      attendancePercentage: 0,
+    };
+
+    const effectivePresent = stats.presentCount + stats.leftCount;
+    stats.attendancePercentage = stats.totalCount > 0
+      ? (effectivePresent / stats.totalCount) * 100
+      : 0;
+
+    res.status(200).json({
+      message: 'Attendance retrieved successfully',
+      student: {
+        name: student.name,
+        indexNumber: student.indexNumber,
+        lastAttendance: student.lastAttendance,
+        status: student.status,
+      },
+      attendanceHistory: history,
+      stats
+    });
+  } catch (error) {
+    console.error('Error fetching student attendance:', error);
+    res.status(500).json({ message: 'Error fetching attendance', error: error.message });
   }
 };

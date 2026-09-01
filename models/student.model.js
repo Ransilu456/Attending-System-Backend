@@ -71,9 +71,19 @@ const studentSchema = new mongoose.Schema({
       message: props => `Date of birth must be in the past!`
     }
   },
+  profileImage: {
+    type: String,
+    default: null
+  },
   qrCode: {
     type: String,
     required: false
+  },
+  qrToken: {
+    type: String,
+    unique: true,
+    sparse: true,
+    index: true
   },
   attendanceCount: {
     type: Number,
@@ -189,7 +199,9 @@ studentSchema.virtual('age').get(function() {
 
 studentSchema.virtual('calculateAttendancePercentage').get(function() {
   if (!this.attendanceHistory || this.attendanceHistory.length === 0) return 0;
-  const presentCount = this.attendanceHistory.filter(record => record.status === 'present').length;
+  const presentCount = this.attendanceHistory.filter(record =>
+    record.status === 'present' || record.status === 'entered' || record.status === 'left'
+  ).length;
   return (presentCount / this.attendanceHistory.length) * 100;
 });
 
@@ -254,7 +266,7 @@ studentSchema.methods.markAttendance = async function(status, adminId = null, de
   
   const totalRecords = this.attendanceHistory.length;
   const presentRecords = this.attendanceHistory.filter(record => 
-    record.status === 'present' || record.status === 'entered'
+    record.status === 'present' || record.status === 'entered' || record.status === 'left'
   ).length;
   
   this.attendancePercentage = totalRecords > 0 
@@ -274,18 +286,21 @@ studentSchema.methods.getAttendanceStats = function(startDate, endDate) {
     total: records.length,
     present: 0,
     absent: 0,
+    left: 0,
     percentage: 0
   };
 
   records.forEach(record => {
     switch(record.status) {
       case 'present': stats.present++; break;
+      case 'entered': stats.present++; break;
+      case 'left': stats.left++; break;
       case 'absent': stats.absent++; break;
     }
   });
 
   stats.percentage = stats.total > 0 
-    ? (stats.present / stats.total) * 100 
+    ? ((stats.present + stats.left) / stats.total) * 100 
     : 0;
 
   return stats;
@@ -319,7 +334,7 @@ studentSchema.methods.deleteAttendanceRecord = async function(recordId) {
 
   if (this.attendanceHistory.length > 0) {
     const presentCount = this.attendanceHistory.filter(
-      record => record.status === 'present' || record.status === 'entered'
+      record => record.status === 'present' || record.status === 'entered' || record.status === 'left'
     ).length;
     this.attendancePercentage = (presentCount / this.attendanceHistory.length) * 100;
   } else {
@@ -389,7 +404,7 @@ studentSchema.methods.getFilteredAttendanceHistory = function(options = {}) {
   const stats = {
     totalCount: this.attendanceHistory.length,
     filteredCount: totalCount,
-    presentCount: this.attendanceHistory.filter(r => r.status === 'present' || r.status === 'entered').length,
+    presentCount: this.attendanceHistory.filter(r => r.status === 'present' || r.status === 'entered' || r.status === 'left').length,
     absentCount: this.attendanceHistory.filter(r => r.status === 'absent').length,
     attendancePercentage: this.attendancePercentage
   };

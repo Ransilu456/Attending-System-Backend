@@ -31,7 +31,7 @@ export const validateAdminInput = [
 
   body('role')
     .optional()
-    .isIn(['admin', 'superadmin']).withMessage('Invalid role'),
+    .isIn(['admin', 'superadmin', 'developer']).withMessage('Invalid role'),
 
   validateRequest
 ];
@@ -75,7 +75,7 @@ export const validateStudentInput = [
 
 export const validateStudentUpdateInput = [
   body('name')
-    .optional()
+    .optional({ checkFalsy: true })
     .trim()
     .isLength({ min: 2, max: 50 }).withMessage('Name must be between 2 and 50 characters'),
 
@@ -84,28 +84,31 @@ export const validateStudentUpdateInput = [
     .trim(),
 
   body('student_email')
-    .optional()
+    .optional({ checkFalsy: true })
     .trim()
     .isEmail().withMessage('Please provide a valid email'),
 
   body('parent_email')
-    .optional()
+    .optional({ checkFalsy: true })
     .trim()
     .isEmail().withMessage('Please provide a valid email'),
 
   body('parent_telephone')
-    .optional()
+    .optional({ checkFalsy: true })
     .trim()
     .matches(/^\+?[\d\s-]{10,}$/).withMessage('Please provide a valid phone number'),
 
   body('indexNumber')
-    .optional()
+    .optional({ checkFalsy: true })
     .trim()
     .matches(/^[A-Z0-9]+$/).withMessage('Index number must contain only uppercase letters and numbers'),
 
   body('dateOfBirth')
-    .optional()
+    .optional({ checkFalsy: true })
     .isISO8601().withMessage('Please provide a valid date'),
+
+  body('profileImage')
+    .optional(),
 
   validateRequest
 ];

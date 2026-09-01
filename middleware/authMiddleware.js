@@ -94,6 +94,20 @@ export const isAdmin = (req, res, next) => {
   }
 };
 
+export const isDeveloper = (req, res, next) => {
+  try {
+    if (!req.admin) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+    if (req.admin.role !== 'developer') {
+      return res.status(403).json({ message: 'Developer access required' });
+    }
+    next();
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 export const errorHandler = (err, req, res, next) => {
   err.statusCode = err.statusCode || 500;
   err.status = err.status || 'error';
