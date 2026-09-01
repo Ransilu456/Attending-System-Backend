@@ -1,26 +1,34 @@
 import { validationResult, body } from 'express-validator';
+import { logWarning } from '../utils/terminal.js';
 
+// Inspect validation results and return formatted error messages
 export const validateRequest = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
+    const errorList = errors.array().map(err => ({ field: err.path, message: err.msg }));
+    logWarning(`Validation failed on ${req.method} ${req.originalUrl || req.url} - ${errorList.map(e => `${e.field}: ${e.message}`).join('; ')}`);
     return res.status(400).json({
-      status: 'error',
-      errors: errors.array()
+      status: 'fail',
+      message: 'Validation failed',
+      errors: errorList
     });
   }
   next();
 };
 
+// Validation rules for administrator registration and credentials
 export const validateAdminInput = [
   body('name')
     .trim()
     .notEmpty().withMessage('Name is required')
-    .isLength({ min: 2, max: 50 }).withMessage('Name must be between 2 and 50 characters'),
+    .isLength({ min: 2, max: 50 }).withMessage('Name must be between 2 and 50 characters')
+    .escape(),
 
   body('email')
     .trim()
     .notEmpty().withMessage('Email is required')
-    .isEmail().withMessage('Please provide a valid email'),
+    .isEmail().withMessage('Please provide a valid email')
+    .normalizeEmail(),
 
   body('password')
     .notEmpty().withMessage('Password is required')
@@ -31,11 +39,12 @@ export const validateAdminInput = [
 
   body('role')
     .optional()
-    .isIn(['admin', 'superadmin', 'developer']).withMessage('Invalid role'),
+    .isIn(['admin', 'superadmin']).withMessage('Invalid role. Must be admin or superadmin'),
 
   validateRequest
 ];
 
+// Validation rules for creating a new student record
 export const validateStudentInput = [
   body('name')
     .trim()
@@ -49,12 +58,14 @@ export const validateStudentInput = [
   body('student_email')
     .trim()
     .notEmpty().withMessage('Student email is required')
-    .isEmail().withMessage('Please provide a valid email'),
+    .isEmail().withMessage('Please provide a valid email')
+    .normalizeEmail(),
 
   body('parent_email')
     .trim()
     .notEmpty().withMessage('Parent email is required')
-    .isEmail().withMessage('Please provide a valid email'),
+    .isEmail().withMessage('Please provide a valid email')
+    .normalizeEmail(),
 
   body('parent_telephone')
     .trim()
@@ -64,15 +75,16 @@ export const validateStudentInput = [
   body('indexNumber')
     .trim()
     .notEmpty().withMessage('Index number is required')
-    .matches(/^[A-Z0-9]+$/).withMessage('Index number must contain only uppercase letters and numbers'),
+    .matches(/^[A-Za-z0-9]+$/).withMessage('Index number must contain only alphanumeric characters'),
 
   body('dateOfBirth')
     .notEmpty().withMessage('Date of birth is required')
-    .isISO8601().withMessage('Please provide a valid date'),
+    .isISO8601().withMessage('Please provide a valid ISO date'),
 
   validateRequest
 ];
 
+// Validation rules for updating an existing student record
 export const validateStudentUpdateInput = [
   body('name')
     .optional({ checkFalsy: true })
@@ -86,12 +98,14 @@ export const validateStudentUpdateInput = [
   body('student_email')
     .optional({ checkFalsy: true })
     .trim()
-    .isEmail().withMessage('Please provide a valid email'),
+    .isEmail().withMessage('Please provide a valid email')
+    .normalizeEmail(),
 
   body('parent_email')
     .optional({ checkFalsy: true })
     .trim()
-    .isEmail().withMessage('Please provide a valid email'),
+    .isEmail().withMessage('Please provide a valid email')
+    .normalizeEmail(),
 
   body('parent_telephone')
     .optional({ checkFalsy: true })
@@ -101,11 +115,11 @@ export const validateStudentUpdateInput = [
   body('indexNumber')
     .optional({ checkFalsy: true })
     .trim()
-    .matches(/^[A-Z0-9]+$/).withMessage('Index number must contain only uppercase letters and numbers'),
+    .matches(/^[A-Za-z0-9]+$/).withMessage('Index number must contain only alphanumeric characters'),
 
   body('dateOfBirth')
     .optional({ checkFalsy: true })
-    .isISO8601().withMessage('Please provide a valid date'),
+    .isISO8601().withMessage('Please provide a valid ISO date'),
 
   body('profileImage')
     .optional(),
@@ -113,17 +127,10 @@ export const validateStudentUpdateInput = [
   validateRequest
 ];
 
+// Validation rules for attendance scan payloads
 export const validateAttendanceInput = [
   body('qrCodeData')
-    .notEmpty().withMessage('QR code data is required')
-    .isObject().withMessage('QR code data must be an object'),
-
-  body('qrCodeData.indexNumber')
-    .notEmpty().withMessage('Index number is required'),
-
-  body('qrCodeData.name')
-    .notEmpty().withMessage('Name is required'),
+    .notEmpty().withMessage('QR code data is required'),
 
   validateRequest
 ];
-

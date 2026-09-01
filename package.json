@@ -8,8 +8,6 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "build": "npm install",
-    "cli": "node utils/scripts/dev-cli.js",
-    "create-dev": "node utils/scripts/create-developer.js",
     "change-role": "node utils/scripts/change-role.js"
   },
   "keywords": [

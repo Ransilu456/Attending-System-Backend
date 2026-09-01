@@ -1,19 +1,12 @@
 import Student from '../models/student.model.js';
 import { DateTime } from 'luxon';
 
-/**
- * Generate WhatsApp attendance notification link
- * @param {String} studentId
- * @param {String} status
- * @param {Date} timestamp
- */
+// Generate WhatsApp attendance notification deep link for student check-in/out
 export const sendAttendanceNotificationLink = async (studentId, status, timestamp) => {
   try {
-
     const student = await Student.findById(studentId);
 
     if (!student) {
-      console.log(`Student not found with ID: ${studentId}`);
       return {
         success: false,
         error: 'Student not found',
@@ -22,7 +15,6 @@ export const sendAttendanceNotificationLink = async (studentId, status, timestam
     }
 
     if (!student.parent_telephone) {
-      console.log(`No parent phone number for ${student.name}`);
       return {
         success: false,
         error: 'No parent phone number',
@@ -30,20 +22,13 @@ export const sendAttendanceNotificationLink = async (studentId, status, timestam
       };
     }
 
-    /* -------------------------------
-       PHONE NUMBER NORMALIZATION
-    --------------------------------*/
+    // Normalize phone number to international format
+    let phoneNumber = student.parent_telephone.toString().replace(/\D/g, '');
 
-    let phoneNumber = student.parent_telephone
-      .toString()
-      .replace(/\D/g, '');
-
-    // Convert Sri Lankan local format
     if (phoneNumber.startsWith('0')) {
       phoneNumber = '94' + phoneNumber.slice(1);
     }
 
-    // Remove leading +
     if (phoneNumber.startsWith('+')) {
       phoneNumber = phoneNumber.substring(1);
     }
@@ -56,28 +41,8 @@ export const sendAttendanceNotificationLink = async (studentId, status, timestam
       };
     }
 
-    /* -------------------------------
-       FORMAT STATUS TEXT
-    --------------------------------*/
-
-    const displayStatus =
-      status === 'entered'
-        ? 'Entered School'
-        : status === 'left'
-        ? 'Left School'
-        : status;
-
-    /* -------------------------------
-       FORMAT TIME
-    --------------------------------*/
-
-    const scanTime = DateTime
-      .fromJSDate(timestamp)
-      .toLocaleString(DateTime.DATETIME_SHORT);
-
-    /* -------------------------------
-       BUILD MESSAGE
-    --------------------------------*/
+    const displayStatus = status === 'entered' ? 'Entered School' : status === 'left' ? 'Left School' : status;
+    const scanTime = DateTime.fromJSDate(timestamp).toLocaleString(DateTime.DATETIME_SHORT);
 
     const messageText = [
       '*Attendance Update*',
@@ -93,25 +58,8 @@ export const sendAttendanceNotificationLink = async (studentId, status, timestam
       `Address: ${student.address || 'N/A'}`
     ].join('\n');
 
-    /* -------------------------------
-       ENCODE MESSAGE
-    --------------------------------*/
-
     const encodedText = encodeURIComponent(messageText);
-
-    /* -------------------------------
-       CREATE WHATSAPP LINK
-    --------------------------------*/
-
-    const whatsappURL =
-      `https://wa.me/${phoneNumber}?text=${encodedText}`;
-
-    console.log(`WhatsApp link created for ${student.name}:`);
-    console.log(whatsappURL);
-
-    /* -------------------------------
-       RESPONSE OBJECT
-    --------------------------------*/
+    const whatsappURL = `https://wa.me/${phoneNumber}?text=${encodedText}`;
 
     const studentData = {
       name: student.name,
@@ -128,11 +76,7 @@ export const sendAttendanceNotificationLink = async (studentId, status, timestam
       whatsappURL,
       student: studentData
     };
-
   } catch (error) {
-
-    console.error('Error generating WhatsApp link:', error);
-
     return {
       success: false,
       error: error.message,

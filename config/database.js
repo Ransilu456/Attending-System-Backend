@@ -4,6 +4,7 @@ import { logInfo, logSuccess, logError, logWarning } from '../utils/terminal.js'
 const MAX_RETRIES = 3;
 let retryCount = 0;
 
+// Validate MongoDB URI protocol format
 const validateMongoURI = (uri) => {
   if (!uri) {
     throw new Error('MongoDB URI is not defined. Check your .env file');
@@ -16,7 +17,7 @@ const validateMongoURI = (uri) => {
   return true;
 };
 
-
+// Establish connection to MongoDB with retry logic
 export const connectDB = async () => {
   try {
     const uri = process.env.MONGODB_URI;
@@ -34,9 +35,9 @@ export const connectDB = async () => {
     };
 
     const conn = await mongoose.connect(uri, options);
-
     retryCount = 0;
     
+    // Register connection lifecycle listeners
     mongoose.connection.on('disconnected', () => {
       logWarning('MongoDB disconnected. Will attempt to reconnect...');
     });
@@ -53,7 +54,6 @@ export const connectDB = async () => {
     if (retryCount < MAX_RETRIES - 1) {
       retryCount++;
       logWarning(`Retrying connection in 5 seconds... (${retryCount}/${MAX_RETRIES})`);
-
       await new Promise(resolve => setTimeout(resolve, 5000));
       return connectDB();
     }
@@ -63,6 +63,7 @@ export const connectDB = async () => {
   }
 };
 
+// Gracefully close MongoDB connection
 export const closeDB = async () => {
   try {
     if (mongoose.connection.readyState === 0) {

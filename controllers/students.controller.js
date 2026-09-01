@@ -1,20 +1,24 @@
 import Student from '../models/student.model.js';
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 dotenv.config();
 
+// Download student QR code PNG image file attachment
 export const downloadQRCode = async (req, res) => {
   try {
     const { indexNumber, name, studentId } = req.query;
-
     let student;
     
-    if (studentId) {
+    if (studentId && mongoose.Types.ObjectId.isValid(studentId)) {
       student = await Student.findById(studentId);
     } else if (indexNumber && name) {
-      student = await Student.findOne({ indexNumber, name });
+      student = await Student.findOne({ 
+        indexNumber: String(indexNumber).trim().toUpperCase(), 
+        name: String(name).trim() 
+      });
     } else {
-      return res.status(400).json({ message: 'Either studentId OR both indexNumber and name are required' });
+      return res.status(400).json({ message: 'Either valid studentId OR both indexNumber and name are required' });
     }
 
     if (!student) {
@@ -32,11 +36,11 @@ export const downloadQRCode = async (req, res) => {
 
     return res.send(qrCodeBuffer);
   } catch (error) {
-    console.error('Error downloading QR code:', error);
-    res.status(500).json({ message: 'Error downloading QR code', error });
+    res.status(500).json({ message: 'Error downloading QR code', error: error.message });
   }
 };
 
+// Search student and return their QR code payload
 export const searchQRCode = async (req, res) => {
   try {
     const { name, indexNumber } = req.query;
@@ -45,9 +49,11 @@ export const searchQRCode = async (req, res) => {
       return res.status(400).json({ message: 'Either name or indexNumber is required' });
     }
 
-    const student = await Student.findOne({
-      $or: [{ name }, { indexNumber }]
-    });
+    const query = {};
+    if (indexNumber) query.indexNumber = String(indexNumber).trim().toUpperCase();
+    if (name) query.name = String(name).trim();
+
+    const student = await Student.findOne(query);
 
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
@@ -56,20 +62,21 @@ export const searchQRCode = async (req, res) => {
     if (!student.qrCode) {
       return res.status(404).json({ message: 'QR Code not found for this student' });
     }
-   res.status(200).json({ qrCode: student.qrCode });
+    
+    res.status(200).json({ qrCode: student.qrCode });
   } catch (error) {
-    console.error('Error searching for student:', error);
-    res.status(500).json({ message: 'Error searching for student', error });
+    res.status(500).json({ message: 'Error searching for student', error: error.message });
   }
 };
 
+// Fetch student profile details by ID
 export const getStudentProfile = async (req, res) => {
   try {
     const studentId = req.params.studentId || req.query.studentId;
     
-    if (!studentId) {
+    if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
       return res.status(400).json({ 
-        message: 'Student ID is required. Please provide it as a URL parameter or query parameter.' 
+        message: 'Valid student ID is required.' 
       });
     }
     
@@ -84,18 +91,18 @@ export const getStudentProfile = async (req, res) => {
       student
     });
   } catch (error) {
-    console.error('Error fetching student profile:', error);
-    res.status(500).json({ message: 'Error fetching student profile', error });
+    res.status(500).json({ message: 'Error fetching student profile', error: error.message });
   }
 };
 
+// Update student profile details (admin access)
 export const updateStudentProfile = async (req, res) => {
   try {
     const studentId = req.params.studentId || req.query.studentId;
     
-    if (!studentId) {
+    if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
       return res.status(400).json({ 
-        message: 'Student ID is required. Please provide it as a URL parameter or query parameter.' 
+        message: 'Valid student ID is required.' 
       });
     }
     
@@ -116,18 +123,18 @@ export const updateStudentProfile = async (req, res) => {
       student
     });
   } catch (error) {
-    console.error('Error updating student profile:', error);
-    res.status(500).json({ message: 'Error updating student profile', error });
+    res.status(500).json({ message: 'Error updating student profile', error: error.message });
   }
 };
 
+// Retrieve student attendance history filtered by date
 export const getAttendanceHistory = async (req, res) => {
   try {
     const studentId = req.params.studentId || req.query.studentId;
     
-    if (!studentId) {
+    if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
       return res.status(400).json({ 
-        message: 'Student ID is required. Please provide it as a URL parameter or query parameter.' 
+        message: 'Valid student ID is required.' 
       });
     }
     
@@ -158,11 +165,11 @@ export const getAttendanceHistory = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching attendance history:', error);
-    res.status(500).json({ message: 'Error fetching attendance history', error });
+    res.status(500).json({ message: 'Error fetching attendance history', error: error.message });
   }
 };
 
+// Compute high-level dashboard metrics and attendance trends
 export const getDashboardStats = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
@@ -180,7 +187,7 @@ export const getDashboardStats = async (req, res) => {
       status: 'active'
     });
     
-    const studentsAbsent = totalStudents - studentsPresent;
+    const studentsAbsent = Math.max(0, totalStudents - studentsPresent);
     
     const studentsInSchool = await Student.countDocuments({
       'attendanceHistory.entryTime': { $gte: start, $lte: end },
@@ -246,7 +253,6 @@ export const getDashboardStats = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error getting dashboard stats:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Error retrieving dashboard statistics', 
@@ -255,7 +261,7 @@ export const getDashboardStats = async (req, res) => {
   }
 };
 
-// ─── Student Login (email + indexNumber) ─────────────────────
+// Authenticate student using email and index number
 export const studentLogin = async (req, res) => {
   try {
     const { student_email, indexNumber } = req.body;
@@ -265,8 +271,8 @@ export const studentLogin = async (req, res) => {
     }
 
     const student = await Student.findOne({
-      student_email: student_email.toLowerCase().trim(),
-      indexNumber: indexNumber.toUpperCase().trim()
+      student_email: String(student_email).toLowerCase().trim(),
+      indexNumber: String(indexNumber).toUpperCase().trim()
     });
 
     if (!student) {
@@ -275,6 +281,10 @@ export const studentLogin = async (req, res) => {
 
     if (student.status !== 'active') {
       return res.status(401).json({ message: 'Your account is not active. Please contact support.' });
+    }
+
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({ message: 'Server authentication configuration error.' });
     }
 
     const token = jwt.sign(
@@ -307,12 +317,11 @@ export const studentLogin = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Student login error:', error);
     res.status(500).json({ message: 'Error during login', error: error.message });
   }
 };
 
-// ─── Get My Profile (requires student JWT via verifyStudent middleware) ──────
+// Retrieve authenticated student's own profile
 export const getMyProfile = async (req, res) => {
   try {
     const student = await Student.findById(req.student._id).select('-qrCode');
@@ -324,15 +333,13 @@ export const getMyProfile = async (req, res) => {
       student
     });
   } catch (error) {
-    console.error('Error fetching student profile:', error);
     res.status(500).json({ message: 'Error fetching student profile', error: error.message });
   }
 };
 
-// ─── Update My Profile (protected, whitelisted fields only) ──────────────────
+// Update authenticated student's own profile (strictly whitelisted fields)
 export const updateMyProfile = async (req, res) => {
   try {
-    // Strict whitelist — students may only touch these fields
     const ALLOWED_FIELDS = [
       'name', 'student_email', 'address',
       'parent_email', 'parent_telephone', 'dateOfBirth', 'profileImage',
@@ -372,12 +379,11 @@ export const updateMyProfile = async (req, res) => {
       const messages = Object.values(error.errors).map((e) => e.message);
       return res.status(400).json({ message: messages.join(', ') });
     }
-    console.error('Error updating student profile:', error);
     res.status(500).json({ message: 'Error updating profile', error: error.message });
   }
 };
 
-// ─── Get My Attendance (protected, returns full attendance history) ───────────
+// Retrieve authenticated student's own attendance history
 export const getMyAttendance = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
@@ -401,7 +407,6 @@ export const getMyAttendance = async (req, res) => {
       history = history.filter(r => new Date(r.date) <= end);
     }
 
-    // Sort descending by date
     history.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     const stats = {
@@ -429,7 +434,6 @@ export const getMyAttendance = async (req, res) => {
       stats
     });
   } catch (error) {
-    console.error('Error fetching student attendance:', error);
     res.status(500).json({ message: 'Error fetching attendance', error: error.message });
   }
 };

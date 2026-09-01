@@ -1,7 +1,8 @@
 import Notification from '../models/notification.model.js';
 import Student from '../models/student.model.js';
+import mongoose from 'mongoose';
 
-// ─── Admin: Send a notification ──────────────────────────────────────────────
+// Create and broadcast/target a new notification
 export const sendNotification = async (req, res) => {
   try {
     const { title, message, priority = 'normal', type = 'announcement', targetStudents = [] } = req.body;
@@ -10,17 +11,17 @@ export const sendNotification = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Title and message are required' });
     }
 
-    // Validate targetStudents exist if provided
-    if (targetStudents.length > 0) {
-      const validStudents = await Student.find({ _id: { $in: targetStudents } }).select('_id');
+    if (Array.isArray(targetStudents) && targetStudents.length > 0) {
+      const validStudentIds = targetStudents.filter(id => mongoose.Types.ObjectId.isValid(id));
+      const validStudents = await Student.find({ _id: { $in: validStudentIds } }).select('_id');
       if (validStudents.length !== targetStudents.length) {
-        return res.status(400).json({ success: false, message: 'One or more target students not found' });
+        return res.status(400).json({ success: false, message: 'One or more target students are invalid' });
       }
     }
 
     const notification = await Notification.create({
-      title,
-      message,
+      title: title.trim(),
+      message: message.trim(),
       priority,
       type,
       targetStudents,
@@ -41,16 +42,15 @@ export const sendNotification = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error sending notification:', error);
     return res.status(500).json({ success: false, message: 'Failed to send notification', error: error.message });
   }
 };
 
-// ─── Admin: Get all notifications ────────────────────────────────────────────
+// Retrieve paginated list of active notifications
 export const getAllNotifications = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
     const skip = (page - 1) * limit;
 
     const notifications = await Notification.find({ isActive: true })
@@ -67,33 +67,34 @@ export const getAllNotifications = async (req, res) => {
       notifications,
       pagination: { total, page, limit, pages: Math.ceil(total / limit) },
     });
-  } catch (error) {
-    console.error('Error fetching notifications:', error);
+  } catch {
     return res.status(500).json({ success: false, message: 'Failed to fetch notifications' });
   }
 };
 
-// ─── Admin: Delete notification ───────────────────────────────────────────────
+// Deactivate a notification by ID
 export const deleteNotification = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid notification ID' });
+    }
+
     const notification = await Notification.findByIdAndUpdate(id, { isActive: false }, { new: true });
     if (!notification) {
       return res.status(404).json({ success: false, message: 'Notification not found' });
     }
     return res.status(200).json({ success: true, message: 'Notification deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting notification:', error);
+  } catch {
     return res.status(500).json({ success: false, message: 'Failed to delete notification' });
   }
 };
 
-// ─── Student: Get my notifications ───────────────────────────────────────────
+// Fetch notifications relevant to the authenticated student
 export const getStudentNotifications = async (req, res) => {
   try {
     const studentId = req.student._id;
 
-    // Get notifications that are either broadcast (no targetStudents) or targeted to this student
     const notifications = await Notification.find({
       isActive: true,
       $or: [
@@ -105,7 +106,6 @@ export const getStudentNotifications = async (req, res) => {
       .limit(50)
       .lean();
 
-    // Mark which are read by this student
     const result = notifications.map((n) => ({
       ...n,
       isRead: n.readBy?.some((r) => r.student?.toString() === studentId.toString()) ?? false,
@@ -118,17 +118,20 @@ export const getStudentNotifications = async (req, res) => {
       notifications: result,
       unreadCount,
     });
-  } catch (error) {
-    console.error('Error fetching student notifications:', error);
+  } catch {
     return res.status(500).json({ success: false, message: 'Failed to fetch notifications' });
   }
 };
 
-// ─── Student: Mark notification as read ──────────────────────────────────────
+// Mark a specific notification as read by the authenticated student
 export const markNotificationRead = async (req, res) => {
   try {
     const { id } = req.params;
     const studentId = req.student._id;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid notification ID' });
+    }
 
     await Notification.updateOne(
       {
@@ -144,13 +147,12 @@ export const markNotificationRead = async (req, res) => {
     );
 
     return res.status(200).json({ success: true, message: 'Notification marked as read' });
-  } catch (error) {
-    console.error('Error marking notification as read:', error);
+  } catch {
     return res.status(500).json({ success: false, message: 'Failed to mark notification as read' });
   }
 };
 
-// ─── Student: Mark all as read ────────────────────────────────────────────────
+// Mark all notifications as read for the authenticated student
 export const markAllNotificationsRead = async (req, res) => {
   try {
     const studentId = req.student._id;
@@ -172,21 +174,19 @@ export const markAllNotificationsRead = async (req, res) => {
     );
 
     return res.status(200).json({ success: true, message: 'All notifications marked as read' });
-  } catch (error) {
-    console.error('Error marking all notifications as read:', error);
+  } catch {
     return res.status(500).json({ success: false, message: 'Failed to mark notifications as read' });
   }
 };
 
-// ─── Public: Get announcements ───────────────────────────────────────────────
+// Retrieve public announcements
 export const getPublicAnnouncements = async (req, res) => {
   try {
     return res.status(200).json({
       success: true,
       announcements: [],
     });
-  } catch (error) {
-    console.error('Error fetching public announcements:', error);
+  } catch {
     return res.status(500).json({ success: false, message: 'Failed to fetch announcements' });
   }
 };

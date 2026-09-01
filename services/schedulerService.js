@@ -1,7 +1,7 @@
 import { logInfo, logError } from '../utils/terminal.js';
 import { autoMarkLeaveAttendance, checkAllPastAttendance, updateStudentStatuses } from './autoAttendanceService.js';
 
-
+// Start daily automated background tasks and maintenance schedulers
 export const startScheduler = () => {
   try {
     logInfo('Starting scheduler service...');
@@ -9,11 +9,11 @@ export const startScheduler = () => {
       logError(`Error checking past attendance: ${error.message}`);
     });
     
+    // Schedule recurring daily task at 18:45
     const scheduleAutoMarkAttendance = () => {
       const now = new Date();
       const targetTime = new Date();
       targetTime.setHours(18, 45, 0, 0); 
-      
 
       if (now > targetTime) {
         targetTime.setDate(targetTime.getDate() + 1);
@@ -36,7 +36,6 @@ export const startScheduler = () => {
     };
     
     scheduleAutoMarkAttendance();
-    
     logInfo('Scheduler service started successfully');
   } catch (error) {
     logError(`Error starting scheduler service: ${error.message}`);

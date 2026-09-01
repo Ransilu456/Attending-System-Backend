@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import validator from 'validator';
 import crypto from 'crypto';
 
+// Admin user schema definition
 const adminSchema = new mongoose.Schema(
   {
     name: {
@@ -29,8 +30,8 @@ const adminSchema = new mongoose.Schema(
     role: {
       type: String,
       enum: {
-        values: ['admin', 'superadmin', 'developer'],
-        message: 'Role must be admin, superadmin, or developer'
+        values: ['admin', 'superadmin'],
+        message: 'Role must be admin or superadmin'
       },
       default: 'admin'
     },
@@ -57,6 +58,7 @@ const adminSchema = new mongoose.Schema(
   }
 );
 
+// Hash password prior to saving document if modified
 adminSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
 
@@ -69,6 +71,7 @@ adminSchema.pre('save', async function (next) {
   }
 });
 
+// Update passwordChangedAt timestamp on password update
 adminSchema.pre('save', function(next) {
   if (!this.isModified('password') || this.isNew) return next();
   
@@ -76,10 +79,12 @@ adminSchema.pre('save', function(next) {
   next();
 });
 
+// Compare entered plaintext password with stored bcrypt hash
 adminSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
+// Check if password was changed after token issuance
 adminSchema.methods.changedPasswordAfter = function(JWTTimestamp) {
   if (this.passwordChangedAt) {
     const changedTimestamp = parseInt(this.passwordChangedAt.getTime() / 1000, 10);
@@ -88,6 +93,7 @@ adminSchema.methods.changedPasswordAfter = function(JWTTimestamp) {
   return false;
 };
 
+// Generate and hash a secure password reset token
 adminSchema.methods.createPasswordResetToken = function() {
   const resetToken = crypto.randomBytes(32).toString('hex');
   
@@ -96,21 +102,23 @@ adminSchema.methods.createPasswordResetToken = function() {
     .update(resetToken)
     .digest('hex');
   
-  this.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+  this.passwordResetExpires = Date.now() + 10 * 60 * 1000;
   
   return resetToken;
 };
 
+// Increment failed login counter and lock account for 30 minutes after 5 attempts
 adminSchema.methods.handleFailedLogin = async function() {
   this.failedLoginAttempts += 1;
   
   if (this.failedLoginAttempts >= 5) {
-    this.accountLockedUntil = Date.now() + 30 * 60 * 1000; // Lock for 30 minutes
+    this.accountLockedUntil = Date.now() + 30 * 60 * 1000;
   }
   
   await this.save();
 };
 
+// Reset failed login counter and update last login timestamp on success
 adminSchema.methods.handleSuccessfulLogin = async function() {
   this.failedLoginAttempts = 0;
   this.lastLogin = Date.now();

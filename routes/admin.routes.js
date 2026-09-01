@@ -23,20 +23,21 @@ import {
 
 const router = express.Router();
 
-// Rate limiters
+// Rate limiter for admin login attempts
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5,
-  message: 'Too many login attempts. Please try again after 15 minutes.'
-});
-
-const studentLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
+  windowMs: 15 * 60 * 1000,
   max: 10,
-  message: 'Too many student registration attempts. Please try again later.'
+  message: { status: 'fail', message: 'Too many login attempts. Please try again after 15 minutes.' }
 });
 
-// Authentication routes
+// Rate limiter for student registration
+const studentLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { status: 'fail', message: 'Too many student registration attempts. Please try again later.' }
+});
+
+// Admin authentication & account recovery routes
 router.post('/register', validateAdminInput, registerAdmin);
 router.post('/login', loginLimiter, loginAdmin);
 router.post('/logout', logoutAdmin);
@@ -44,23 +45,21 @@ router.post('/forgot-password', forgotPassword);
 router.post('/reset-password/:token', resetPassword);
 router.post('/update-password', protect, updatePassword);
 router.patch('/profile', protect, updateProfile);
-
-// Admin profile routes
 router.get('/me', protect, getAdminDetails);
 
-// Student management routes
+// Student management routes (admin protected)
 router.get('/students', protect, isAdmin, getStudents);
 router.get('/students/all', protect, isAdmin, getAllStudents);
 router.post('/students', protect, isAdmin, studentLimiter, validateStudentInput, registerStudent);
-router.put('/students/:id', protect, validateStudentInput, updateStudent);
-router.patch('/students/:id', protect, validateStudentUpdateInput, updateStudent);
+router.put('/students/:id', protect, isAdmin, validateStudentInput, updateStudent);
+router.patch('/students/:id', protect, isAdmin, validateStudentUpdateInput, updateStudent);
 router.delete('/students/:id', protect, isAdmin, deleteStudent);
 
-// QR Code routes
+// Student QR code generation routes (admin protected)
 router.get('/students/:id/qr-code', protect, isAdmin, generateStudentQRCode);
 router.get('/students/qr-code/:indexNumber', protect, isAdmin, getStudentQRByIndex);
 
-// Attendance routes
-router.get('/attendance/recent', protect, getRecentAttendance);
+// Attendance overview route (admin protected)
+router.get('/attendance/recent', protect, isAdmin, getRecentAttendance);
 
 export default router;

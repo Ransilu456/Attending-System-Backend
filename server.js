@@ -2,37 +2,29 @@ import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import fs from 'fs';
-import path from 'path';
+import mongoose from 'mongoose';
+import rateLimit from 'express-rate-limit';
+
 import studentRoutes from './routes/students.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import qrScannerRoutes from './routes/qrScanner.routes.js';
 import attendanceRoutes from './routes/attendance.routes.js';
-import developerRoutes from './routes/developer.routes.js';
 import notificationRoutes from './routes/notifications.routes.js';
-import mongoose from 'mongoose';
-import { startScheduler } from './services/schedulerService.js';
 
+import { startScheduler } from './services/schedulerService.js';
 import { errorHandler } from './middleware/authMiddleware.js';
-import { requestLogger, initRequestLogger, shutdownRequestLogger } from './middleware/requestLogger.js';
-import { printBanner, logInfo, logSuccess, logWarning, logError, logSection, logServerStart, startSpinner, succeedSpinner, stopSpinner } from './utils/terminal.js';
+import { printBanner, logInfo, logSuccess, logWarning, logError, logSection, logServerStart, stopSpinner, succeedSpinner } from './utils/terminal.js';
 import { connectDB, closeDB } from './config/database.js';
 
 dotenv.config();
-/*
-const qrCodesDir = path.join(process.cwd(), 'public', 'qr-codes');
-const whatsappSessionDir = path.join(process.cwd(), 'whatsapp-session');
 
-[qrCodesDir, whatsappSessionDir].forEach(dir => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-    logInfo(`Created directory: ${dir}`);
-  }
-});
-*/
 const app = express();
 const port = process.env.PORT || 5001;
 
+// Disable Express fingerprint header
+app.disable('x-powered-by');
+
+// Trusted CORS origins list
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
@@ -43,13 +35,13 @@ const allowedOrigins = [
   process.env.CLIENT_URL
 ].filter(Boolean);
 
-// CORS configuration
+// CORS cross-origin configuration
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      callback(new Error('Blocked by CORS policy'));
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
@@ -68,56 +60,65 @@ app.use(cors({
   credentials: true
 }));
 
-// Security headers middleware
+// Production security headers middleware
 app.use((req, res, next) => {
-  logInfo(`${req.method} ${req.url}`);
-
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-
   next();
 });
 
-// Error logging middleware
+// Global API rate limiter to protect against denial-of-service
+const globalApiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
+  message: { status: 'fail', message: 'Too many requests from this IP. Please try again later.' }
+});
+app.use('/api/', globalApiLimiter);
+
+// Parse JSON and urlencoded request bodies with size limits
+app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
+
+// Handle invalid JSON payload syntax errors cleanly
 app.use((err, req, res, next) => {
-  logError(`Error processing ${req.method} ${req.url}: ${err.message}`);
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({
+      success: false,
+      message: 'Malformed JSON payload'
+    });
+  }
   next(err);
 });
 
-// Body parser configuration
-app.use(bodyParser.json({
-  limit: '10mb',
-  verify: (req, res, buf) => {
-    try {
-      JSON.parse(buf);
-    } catch (e) {
-      logError(`Invalid JSON received: ${e.message}`);
-      res.status(400).json({
-        success: false,
-        message: 'Invalid JSON payload',
-        error: e.message
-      });
+// Request and response logger
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const logMessage = `${req.method} ${req.originalUrl || req.url} ${res.statusCode} (${duration}ms)`;
+    if (res.statusCode >= 500) {
+      logError(logMessage);
+    } else if (res.statusCode >= 400) {
+      logWarning(logMessage);
+    } else {
+      logInfo(logMessage);
     }
-  }
-}));
+  });
+  next();
+});
 
-app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
-
-// Request logger (dev monitoring — captures device, identity, timing)
-app.use(requestLogger);
-
-// API routes
+// API route registrations
 app.use('/api/students', studentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/qr', qrScannerRoutes);
 app.use('/api/attendance', attendanceRoutes);
-app.use('/api/developer', developerRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/public', express.static('public'));
 
-// Health endpoint
+// Server health check endpoint
 app.get('/api/health', (req, res) => {
   const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
 
@@ -127,20 +128,15 @@ app.get('/api/health', (req, res) => {
     services: {
       database: {
         status: dbStatus,
-        connection: mongoose.connection.host
+        connection: mongoose.connection.host || 'unknown'
       },
     },
-    environment: process.env.NODE_ENV,
-    version: process.version,
-    network: {
-      host: req.hostname,
-      ip: req.ip,
-      protocol: req.protocol
-    }
+    environment: process.env.NODE_ENV || 'development',
+    version: '8.1.0'
   });
 });
 
-// 404 handler
+// 404 Route handler for undefined endpoints
 app.use((req, res) => {
   logWarning(`Route not found: ${req.method} ${req.url}`);
   res.status(404).json({
@@ -150,9 +146,10 @@ app.use((req, res) => {
   });
 });
 
+// Centralized error handling middleware
 app.use(errorHandler);
 
-// Start the server
+// Server startup and initialization sequence
 const startServer = async () => {
   let server;
   try {
@@ -167,25 +164,16 @@ const startServer = async () => {
     logInfo(`Environment: ${process.env.NODE_ENV || 'development'}`);
     logInfo(`Port: ${port}`);
     logInfo(`CORS Origins: ${allowedOrigins.join(', ')}`);
-    logInfo(`Weekend Attendance: ${process.env.ENABLE_WEEKEND_ATTENDANCE === 'true' ? 'ENABLED' : 'DISABLED'}`);
 
     logSection('Database');
     await connectDB();
     succeedSpinner('db', 'Connected to MongoDB successfully');
-
-    // Initialize request logger (loads config + existing logs)
-    initRequestLogger();
-/*
-    initializeWhatsApp().catch(err => {
-      console.error('WhatsApp initialization failed:', err);
-    });*/
 
     logSection('API Routes');
     logInfo('GET  /api/health - Health check endpoint');
     logInfo('POST /api/qr/markAttendanceQR - QR code attendance marking');
     logInfo('GET  /api/students/download-qr-code - Download student QR code');
 
-    // Start server on all network interfaces
     server = app.listen(port, '0.0.0.0', () => {
       stopSpinner('server');
       logServerStart(port);
@@ -194,10 +182,9 @@ const startServer = async () => {
 
     startScheduler();
 
-    // Server error handling
     server.on('error', (error) => {
       if (error.code === 'EADDRINUSE') {
-        logError(`Port ${port} is already in use. Please choose a different port or terminate the existing process.`);
+        logError(`Port ${port} is already in use.`);
         process.exit(1);
       } else {
         logError(`Server error: ${error.message}`);
@@ -205,20 +192,17 @@ const startServer = async () => {
       }
     });
 
-    // Track active connections
     let connections = new Set();
     server.on('connection', (connection) => {
       connections.add(connection);
       connection.on('close', () => connections.delete(connection));
     });
 
-    // Graceful shutdown handler
+    // Graceful process shutdown handler
     const gracefulShutdown = (signal) => {
       logWarning(`Received ${signal} signal. Shutting down gracefully...`);
-      shutdownRequestLogger();
 
       if (!server || server.listening === false) {
-        logWarning('Server not running, proceeding to close database');
         closeDBAndExit();
         return;
       }
@@ -233,12 +217,11 @@ const startServer = async () => {
         clearTimeout(forceShutdownTimeout);
 
         if (connections && connections.size > 0) {
-          logInfo(`Closing ${connections.size} active connections...`);
           for (const connection of connections) {
             try {
               connection.end();
-            } catch (err) {
-              logWarning(`Error closing a connection: ${err.message}`);
+            } catch {
+              // Ignore cleanup close error
             }
           }
           connections.clear();
@@ -257,13 +240,11 @@ const startServer = async () => {
             process.exit(1);
           });
         } else {
-          logInfo('No active database connection to close.');
           process.exit(0);
         }
       }
     };
 
-    // Register shutdown handlers
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 

@@ -1,7 +1,7 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { validateStudentUpdateInput } from '../middleware/validationMiddleware.js';
-import { protect, restrictTo, verifyStudent } from '../middleware/authMiddleware.js';
+import { protect, isAdmin, verifyStudent } from '../middleware/authMiddleware.js';
 import {
   downloadQRCode,
   searchQRCode,
@@ -17,33 +17,35 @@ import {
 
 const router = express.Router();
 
+// Rate limiter for QR downloads
 const qrLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,
-  message: 'Too many QR code requests. Please try again later.'
+  message: { status: 'fail', message: 'Too many QR code requests. Please try again later.' }
 });
 
+// Rate limiter for student login attempts
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
-  message: 'Too many login attempts. Please try again later.'
+  message: { status: 'fail', message: 'Too many login attempts. Please try again later.' }
 });
 
-// ─── Admin-protected student routes ─────────────────────────────────────────
-router.get('/profile/:studentId', protect, getStudentProfile);
-router.patch('/profile/:studentId', protect, validateStudentUpdateInput, updateStudentProfile);
-router.get('/attendance-history/:studentId', protect, getAttendanceHistory);
-router.get('/attendance-history', protect, getAttendanceHistory);
-router.get('/dashboard-stats', protect, restrictTo('admin'), getDashboardStats);
+// Admin-managed student profile & statistics routes
+router.get('/profile/:studentId', protect, isAdmin, getStudentProfile);
+router.patch('/profile/:studentId', protect, isAdmin, validateStudentUpdateInput, updateStudentProfile);
+router.get('/attendance-history/:studentId', protect, isAdmin, getAttendanceHistory);
+router.get('/attendance-history', protect, isAdmin, getAttendanceHistory);
+router.get('/dashboard-stats', protect, isAdmin, getDashboardStats);
 
-// ─── Public routes ────────────────────────────────────────────────────────────
+// Public student QR lookup & download endpoints
 router.get('/download-qr-code', qrLimiter, downloadQRCode);
 router.get('/search-qr', qrLimiter, searchQRCode);
 
-// ─── Student authentication routes ───────────────────────────────────────────
+// Student authentication route
 router.post('/login', loginLimiter, studentLogin);
 
-// ─── Student self-service routes (protected by verifyStudent) ────────────────
+// Student authenticated self-service routes
 router.get('/me', verifyStudent, getMyProfile);
 router.patch('/me', verifyStudent, validateStudentUpdateInput, updateMyProfile);
 router.get('/me/attendance', verifyStudent, getMyAttendance);

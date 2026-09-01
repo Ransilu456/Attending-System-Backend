@@ -1,3 +1,4 @@
+// Custom operational application error class
 class AppError extends Error {
   constructor(message, statusCode) {
     super(message);
@@ -9,4 +10,4 @@ class AppError extends Error {
   }
 }
 
-export default AppError; 
+export default AppError;

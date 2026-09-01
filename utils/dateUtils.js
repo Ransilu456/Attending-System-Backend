@@ -1,7 +1,4 @@
-/**
- * @param {*} mongoDate
- * @returns {Date|null} 
- */
+// Parse multiple MongoDB date representations safely into a standard Date object
 export const parseMongoDate = (mongoDate) => {
   if (!mongoDate) return null;
   
@@ -12,16 +9,10 @@ export const parseMongoDate = (mongoDate) => {
 
     if (typeof mongoDate === 'object') {
       if (mongoDate.$date) {
-        
         if (mongoDate.$date.$numberLong) {
-          return new Date(parseInt(mongoDate.$date.$numberLong));
+          return new Date(parseInt(mongoDate.$date.$numberLong, 10));
         }
-        
-        else if (typeof mongoDate.$date === 'string') {
-          return new Date(mongoDate.$date);
-        }
-        
-        else if (typeof mongoDate.$date === 'number') {
+        if (typeof mongoDate.$date === 'string' || typeof mongoDate.$date === 'number') {
           return new Date(mongoDate.$date);
         }
       }
@@ -35,14 +26,10 @@ export const parseMongoDate = (mongoDate) => {
       try {
         const parsed = JSON.parse(mongoDate);
         if (parsed.$date) {
-          if (parsed.$date.$numberLong) {
-            return new Date(parseInt(parsed.$date.$numberLong));
-          } else {
-            return new Date(parsed.$date);
-          }
+          return parsed.$date.$numberLong ? new Date(parseInt(parsed.$date.$numberLong, 10)) : new Date(parsed.$date);
         }
-      } catch (e) {
-        console.warn('Failed to parse stringified MongoDB date:', e);
+      } catch {
+        // Fall back to standard date parsing
       }
     }
     
@@ -53,19 +40,13 @@ export const parseMongoDate = (mongoDate) => {
       }
     }
   
-    console.warn('Unrecognized date format:', mongoDate);
     return null;
-  } catch (error) {
-    console.error('Error parsing MongoDB date:', error, mongoDate);
+  } catch {
     return null;
   }
 };
 
-/**
- * @param {*} date 
- * @param {Object} options 
- * @returns {string} 
- */
+// Format a date object or string into localized time string
 export const formatTimeFromDate = (date, options = {}) => {
   if (!date) return 'N/A';
   
@@ -83,17 +64,12 @@ export const formatTimeFromDate = (date, options = {}) => {
     };
     
     return parsedDate.toLocaleTimeString('en-US', { ...defaultOptions, ...options });
-  } catch (error) {
-    console.error('Error formatting time from date:', error, date);
+  } catch {
     return 'N/A';
   }
 };
 
-/**
- * @param {*} startDate 
- * @param {*} endDate 
- * @returns {string}
- */
+// Calculate elapsed human-readable duration between two dates
 export const calculateDuration = (startDate, endDate) => {
   if (!startDate || !endDate) return 'N/A';
   
@@ -112,8 +88,7 @@ export const calculateDuration = (startDate, endDate) => {
     const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
     
     return `${hours}h ${minutes}m`;
-  } catch (error) {
-    console.error('Error calculating duration:', error, { startDate, endDate });
+  } catch {
     return 'N/A';
   }
 };
@@ -122,4 +97,4 @@ export default {
   parseMongoDate,
   formatTimeFromDate,
   calculateDuration
-}; 
+};

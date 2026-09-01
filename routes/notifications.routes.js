@@ -1,7 +1,6 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { protect } from '../middleware/authMiddleware.js';
-import { verifyStudent } from '../middleware/authMiddleware.js';
+import { protect, isAdmin, verifyStudent } from '../middleware/authMiddleware.js';
 import {
   sendNotification,
   getAllNotifications,
@@ -14,21 +13,22 @@ import {
 
 const router = express.Router();
 
+// Rate limiter for student notification requests
 const notifLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 30,
-  message: 'Too many notification requests. Please try again later.',
+  windowMs: 60 * 1000,
+  max: 60,
+  message: { status: 'fail', message: 'Too many notification requests. Please try again later.' },
 });
 
-// ─── Public routes ────────────────────────────────────────────────────────────
+// Public notification routes
 router.get('/public', getPublicAnnouncements);
 
-// ─── Admin routes (protected) ─────────────────────────────────────────────────
-router.post('/', protect, sendNotification);
-router.get('/', protect, getAllNotifications);
-router.delete('/:id', protect, deleteNotification);
+// Administrator notification routes (admin protected)
+router.post('/', protect, isAdmin, sendNotification);
+router.get('/', protect, isAdmin, getAllNotifications);
+router.delete('/:id', protect, isAdmin, deleteNotification);
 
-// ─── Student routes (student auth) ───────────────────────────────────────────
+// Student self-service notification routes (student token protected)
 router.get('/student/me', notifLimiter, verifyStudent, getStudentNotifications);
 router.patch('/student/:id/read', notifLimiter, verifyStudent, markNotificationRead);
 router.patch('/student/read-all', notifLimiter, verifyStudent, markAllNotificationsRead);

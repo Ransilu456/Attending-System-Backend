@@ -1,24 +1,11 @@
 #!/usr/bin/env node
 
-/**
- * DP Attendance — Change Admin Role
- * ──────────────────────────────────
- * Changes any admin's role by verifying their password first.
- * Connects directly to MongoDB — no API login required.
- *
- * Usage:
- *   node utils/scripts/change-role.js
- *
- * Environment:
- *   MONGODB_URI — MongoDB connection string (read from .env automatically)
- */
-
 import readline from 'readline';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import chalk from 'chalk';
 import {
-  logInfo, logSuccess, logError, logWarning, logSection, logBox,
+  logInfo, logSuccess, logError, logWarning, logBox,
   startSpinner, succeedSpinner, failSpinner,
 } from '../terminal.js';
 import Admin from '../../models/admin.model.js';
@@ -28,16 +15,16 @@ import { dirname, join } from 'path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(__dirname, '../../.env') });
 
-const VALID_ROLES = ['admin', 'superadmin', 'developer'];
-
-/* ─── Readline ────────────────────────────────────────────────────────────── */
+const VALID_ROLES = ['admin', 'superadmin'];
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
 
+// Prompt helper for CLI inputs
 function prompt(question) {
   return new Promise(resolve => rl.question(chalk.gray(question), resolve));
 }
 
+// Masked input helper for sensitive fields
 function promptHidden(question) {
   return new Promise(resolve => {
     if (!process.stdin.isTTY) {
@@ -69,17 +56,15 @@ function promptHidden(question) {
   });
 }
 
+// Teardown CLI stream and database connection
 function cleanup() {
   rl.close();
   mongoose.disconnect().catch(() => {});
 }
 
-/* ─── Role display helpers ────────────────────────────────────────────────── */
-
 const ROLE_META = {
   admin:      { icon: '🛡️ ', color: chalk.blue,   desc: 'Manage students & attendance' },
   superadmin: { icon: '👑 ', color: chalk.magenta, desc: 'All admin capabilities + manage admins' },
-  developer:  { icon: '💻 ', color: chalk.cyan,    desc: 'CLI/API access only — no dashboard' },
 };
 
 function roleLabel(role) {
@@ -87,10 +72,8 @@ function roleLabel(role) {
   return `${meta.icon} ${meta.color(role.padEnd(10))} ${chalk.gray(meta.desc)}`;
 }
 
-/* ─── Main ────────────────────────────────────────────────────────────────── */
-
+// Main execution routine
 async function main() {
-  // ─── Header ───────────────────────────────────────────────────────────────
   const cols = Math.min(process.stdout.columns || 80, 90);
   console.log();
   console.log(chalk.bold.magenta('  ' + '═'.repeat(cols - 2)));
@@ -100,7 +83,6 @@ async function main() {
   logInfo('You must verify the account\'s password to proceed.');
   console.log();
 
-  // ─── Database ─────────────────────────────────────────────────────────────
   const mongoURI = process.env.MONGODB_URI;
   if (!mongoURI) {
     logError('MONGODB_URI not found. Add it to .env in the project root.');
@@ -111,14 +93,13 @@ async function main() {
   startSpinner(dbSpin, 'Connecting to MongoDB');
   try {
     await mongoose.connect(mongoURI);
-    succeedSpinner(dbSpin, `Connected — ${chalk.gray(mongoURI.replace(/\/\/[^:]+:[^@]+@/, '//****:****@'))}`);
+    succeedSpinner(dbSpin, 'Connected to MongoDB');
   } catch (err) {
     failSpinner(dbSpin, 'Connection failed');
     logError(err.message);
     process.exit(1);
   }
 
-  // ─── Look up account ──────────────────────────────────────────────────────
   const email = (await prompt('  Admin email   : ')).trim().toLowerCase();
   if (!email) { logError('Email is required.'); cleanup(); process.exit(1); }
 
@@ -139,7 +120,6 @@ async function main() {
     `ID    : ${chalk.gray(admin._id)}`,
   ].join('\n'));
 
-  // ─── Verify password ──────────────────────────────────────────────────────
   const password = (await promptHidden('  Password      : ')).trim();
   if (!password) { logError('Password is required.'); cleanup(); process.exit(1); }
 
@@ -153,7 +133,6 @@ async function main() {
   }
   succeedSpinner(verifySpin, 'Password verified');
 
-  // ─── Select new role ──────────────────────────────────────────────────────
   console.log();
   console.log(`  ${chalk.bold('Available roles:')}`);
   VALID_ROLES.forEach((r, i) => {
@@ -161,12 +140,11 @@ async function main() {
   });
   console.log();
 
-  const choice = (await prompt('  New role (1/2/3 or name): ')).trim();
+  const choice = (await prompt('  New role (1/2 or name): ')).trim();
   let newRole;
 
   if (choice === '1')                   newRole = 'admin';
   else if (choice === '2')              newRole = 'superadmin';
-  else if (choice === '3')              newRole = 'developer';
   else if (VALID_ROLES.includes(choice)) newRole = choice;
   else {
     logError(`Invalid choice: "${choice}". Options: ${VALID_ROLES.join(', ')}`);
@@ -178,7 +156,6 @@ async function main() {
     cleanup(); process.exit(0);
   }
 
-  // ─── Confirm ──────────────────────────────────────────────────────────────
   console.log();
   const arrow = chalk.gray('→');
   const confirmMsg = `  Confirm: ${chalk.bold(admin.name)} ${chalk.red(admin.role)} ${arrow} ${chalk.green(newRole)} (yes/no): `;
@@ -189,7 +166,6 @@ async function main() {
     cleanup(); process.exit(0);
   }
 
-  // ─── Update ───────────────────────────────────────────────────────────────
   const updateSpin = 'update';
   startSpinner(updateSpin, 'Updating role');
   const oldRole = admin.role;
@@ -201,20 +177,6 @@ async function main() {
     `Account : ${chalk.bold.white(admin.name)} (${chalk.gray(admin.email)})`,
     `Change  : ${chalk.red(oldRole)} ${chalk.gray('→')} ${chalk.green(newRole)}`,
   ].join('\n'));
-
-  // ─── Post-change guidance ─────────────────────────────────────────────────
-  console.log();
-  if (newRole === 'developer') {
-    logInfo(`${chalk.bold(admin.name)} now has ${chalk.cyan('developer')} access:`);
-    console.log(`    ${chalk.gray('•')} ${chalk.cyan('node utils/scripts/dev-cli.js')}  then  ${chalk.cyan('login')}`);
-    console.log(`    ${chalk.gray('•')} ${chalk.cyan('POST /api/developer/login')}`);
-    logWarning('They can no longer access the admin dashboard.');
-  } else if (newRole === 'superadmin') {
-    logInfo(`${chalk.bold(admin.name)} now has full ${chalk.magenta('superadmin')} access.`);
-    logInfo('They can manage other admins from the admin panel.');
-  } else {
-    logInfo(`${chalk.bold(admin.name)} is now a standard ${chalk.blue('admin')}.`);
-  }
 
   cleanup();
   console.log();

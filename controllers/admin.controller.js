@@ -2,6 +2,7 @@ import Admin from '../models/admin.model.js';
 import Student from '../models/student.model.js';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import { DateTime } from 'luxon';
 import { generateQRCode } from '../utils/qrGenerator.js';
@@ -9,35 +10,37 @@ import { mongoIdToNumericCode } from '../utils/idConverter.js';
 
 dotenv.config();
 
+// Register a new administrator account 
 export const registerAdmin = async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password } = req.body;
 
-  // Validate input
   if (!name || !email || !password) {
     return res.status(400).json({ message: 'Please provide all required fields.' });
   }
 
-  const existingAdmin = await Admin.findOne({ email });
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const existingAdmin = await Admin.findOne({ email: normalizedEmail });
   if (existingAdmin) {
-    return res.status(400).json({ message: 'Admin already exists.' });
+    return res.status(400).json({ message: 'Admin account already exists with this email.' });
   }
 
+  // Security: Prevent unauthenticated privilege escalation to superadmin
   const newAdmin = new Admin({
-    name,
-    email,
+    name: String(name).trim(),
+    email: normalizedEmail,
     password,
-    role,
+    role: 'admin',
   });
 
   try {
     await newAdmin.save();
     res.status(201).json({ message: 'Admin registered successfully.' });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error registering admin.' });
+    res.status(500).json({ message: 'Error registering admin.', error: error.message });
   }
 };
 
+// Authenticate administrator credentials and issue JWT
 export const loginAdmin = async (req, res) => {
   const { email, password } = req.body;
 
@@ -46,19 +49,36 @@ export const loginAdmin = async (req, res) => {
   }
 
   try {
-    const admin = await Admin.findOne({ email }).select('+password');
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const admin = await Admin.findOne({ email: normalizedEmail }).select('+password');
     if (!admin) {
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
 
+    if (!admin.isActive) {
+      return res.status(401).json({ message: 'Account is inactive. Please contact support.' });
+    }
+
+    // Check if account is temporarily locked due to previous failed attempts
+    if (admin.accountLockedUntil && admin.accountLockedUntil > Date.now()) {
+      return res.status(401).json({ message: 'Account is temporarily locked. Please try again later.' });
+    }
+
     const isMatch = await admin.matchPassword(password);
     if (!isMatch) {
+      await admin.handleFailedLogin();
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
 
-    const token = jwt.sign({ id: admin._id, role: admin.role }, process.env.JWT_SECRET, {
-      expiresIn: '1h',
-    });
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({ message: 'Server authentication configuration error.' });
+    }
+
+    const token = jwt.sign(
+      { id: admin._id, role: admin.role }, 
+      process.env.JWT_SECRET, 
+      { expiresIn: '8h' }
+    );
 
     await admin.handleSuccessfulLogin();
     res.status(200).json({
@@ -72,27 +92,18 @@ export const loginAdmin = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error logging in admin.' });
+    res.status(500).json({ message: 'Error logging in admin.', error: error.message });
   }
 };
 
+// Invalidate admin session acknowledgment
 export const logoutAdmin = async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-
-    if (!token) {
-      return res.status(401).json({ message: 'No token provided.' });
-    };
-
-    console.log(`Admin logout: ${req.user?.name || 'Unknown user'} at ${new Date().toISOString()}`);
-
     return res.status(200).json({
       status: 'success',
       message: 'Logged out successfully'
     });
   } catch (error) {
-    console.error('Error in logout:', error);
     return res.status(500).json({
       status: 'error',
       message: 'An error occurred during logout',
@@ -101,28 +112,29 @@ export const logoutAdmin = async (req, res) => {
   }
 };
 
+// Retrieve authenticated admin user details
 export const getAdminDetails = async (req, res) => {
-  const adminId = req.admin.id;
+  const adminId = req.admin?.id || req.admin?._id;
 
   try {
-    const admin = await Admin.findById(adminId).select('-password'); // Exclude password from response
+    const admin = await Admin.findById(adminId).select('-password');
     if (!admin) {
       return res.status(404).json({ message: 'Admin not found' });
     }
 
     res.status(200).json(admin);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error fetching admin details.' });
+    res.status(500).json({ message: 'Error fetching admin details.', error: error.message });
   }
 };
 
+// Query paginated and searchable students list
 export const getStudents = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
     const skip = (page - 1) * limit;
-    const search = req.query.search || '';
+    const search = req.query.search ? String(req.query.search).trim() : '';
 
     let query = {};
     if (search) {
@@ -155,23 +167,25 @@ export const getStudents = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('Error fetching students:', err);
     res.status(500).json({ message: 'Error fetching students', error: err.message });
   }
 };
 
+// Update an existing student record by ID
 export const updateStudent = async (req, res) => {
   const { id } = req.params;
   const updateData = req.body;
 
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: 'Invalid student ID' });
+  }
+
   try {
-    // Find the student first to get the current data
     const student = await Student.findById(id);
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
     }
 
-    // Update the student with the new data
     const updatedStudent = await Student.findByIdAndUpdate(
       id,
       updateData,
@@ -183,13 +197,17 @@ export const updateStudent = async (req, res) => {
       student: updatedStudent
     });
   } catch (err) {
-    console.error('Error updating student:', err);
-    res.status(500).json({ message: 'Error updating student', error: err });
+    res.status(500).json({ message: 'Error updating student', error: err.message });
   }
 };
 
+// Permanently delete a student record by ID
 export const deleteStudent = async (req, res) => {
   const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: 'Invalid student ID' });
+  }
 
   try {
     const student = await Student.findByIdAndDelete(id);
@@ -198,87 +216,68 @@ export const deleteStudent = async (req, res) => {
     }
     res.status(200).json({ message: 'Student deleted successfully' });
   } catch (err) {
-    res.status(500).json({ message: 'Error deleting student', error: err });
+    res.status(500).json({ message: 'Error deleting student', error: err.message });
   }
 };
 
+// Fetch all student records excluding heavy history arrays
 export const getAllStudents = async (req, res) => {
   try {
-    // Fetch all students but exclude heavy history and messages arrays
     const students = await Student.find().select('-attendanceHistory -messages').lean();
 
     res.status(200).json({
-      message: "All students fetched successfully.",
-      students: students,
+      message: 'All students fetched successfully.',
+      students,
     });
   } catch (error) {
-    console.error('Error fetching all students:', error);
     res.status(500).json({ message: 'Error fetching all students', error: error.message });
   }
 };
 
+// Register a new student and generate their unique QR code token
 export const registerStudent = async (req, res) => {
   try {
     const { name, address, student_email, parent_email, parent_telephone, indexNumber, dateOfBirth } = req.body;
 
-    // Validate the input
     if (!name || !address || !student_email || !parent_email || !parent_telephone || !indexNumber || !dateOfBirth) {
       return res.status(400).json({ message: 'All fields are required' });
     }
 
-    // Generate secure random token
     const qrToken = crypto.randomBytes(16).toString('hex');
 
-    // Create a new student instance
     const newStudent = new Student({
-      name,
-      address,
-      student_email,
-      parent_email,
-      parent_telephone,
-      indexNumber,
+      name: String(name).trim(),
+      address: String(address).trim(),
+      student_email: String(student_email).toLowerCase().trim(),
+      parent_email: String(parent_email).toLowerCase().trim(),
+      parent_telephone: String(parent_telephone).trim(),
+      indexNumber: String(indexNumber).toUpperCase().trim(),
       dateOfBirth,
       qrToken
     });
 
-    // Save the student to the database
-    await newStudent.save()
-      .then(async (savedStudent) => {
-        try {
-          // Generate QR code with the secure token instead of DB ID
-          const qrCode = await generateQRCode(savedStudent.qrToken);
+    const savedStudent = await newStudent.save();
+    const qrCode = await generateQRCode(savedStudent.qrToken);
+    savedStudent.qrCode = qrCode;
+    await savedStudent.save();
 
-          // Update the saved student with the QR code
-          savedStudent.qrCode = qrCode;
-          await savedStudent.save();
-
-          // Respond with the student data and QR code URL
-          res.status(201).json({
-            message: 'Student registered successfully',
-            student: {
-              name: savedStudent.name,
-              indexNumber: savedStudent.indexNumber,
-              email: savedStudent.student_email,
-              dateOfBirth: savedStudent.dateOfBirth,
-              _id: savedStudent._id
-            },
-            qrCode
-          });
-        } catch (qrError) {
-          console.error('Error generating QR code:', qrError);
-          res.status(500).json({ message: 'Error generating QR code', error: qrError });
-        }
-      })
-      .catch((err) => {
-        console.error('Error saving student:', err);
-        res.status(500).json({ message: 'Error saving student to database', error: err });
-      });
+    res.status(201).json({
+      message: 'Student registered successfully',
+      student: {
+        name: savedStudent.name,
+        indexNumber: savedStudent.indexNumber,
+        email: savedStudent.student_email,
+        dateOfBirth: savedStudent.dateOfBirth,
+        _id: savedStudent._id
+      },
+      qrCode
+    });
   } catch (error) {
-    console.error('Error registering student:', error);
-    res.status(500).json({ message: 'Error registering student', error });
+    res.status(500).json({ message: 'Error registering student', error: error.message });
   }
 };
 
+// Handle admin forgot password request and create reset token
 export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
@@ -290,90 +289,44 @@ export const forgotPassword = async (req, res) => {
       });
     }
 
-    console.log(`Processing password reset request for email: ${email}`);
-
-    const admin = await Admin.findOne({ email });
+    const admin = await Admin.findOne({ email: String(email).toLowerCase().trim() });
 
     if (!admin) {
-      // Don't reveal if the user exists or not for security reasons
-      console.log(`Password reset requested for non-existent email: ${email}`);
       return res.status(200).json({
         status: 'success',
-        message: 'If a user with that email exists, a password reset link has been sent.'
+        message: 'If an account with that email exists, a password reset link has been processed.'
       });
     }
 
     const resetToken = admin.createPasswordResetToken();
     await admin.save();
 
-    // URL that would be sent in the email
     const resetURL = `${process.env.CLIENT_URL || 'http://localhost:3000'}/reset-password/${resetToken}`;
-
-    console.log(`Password reset token generated for admin: ${admin.name}`);
-    console.log(`Reset URL (for development): ${resetURL}`);
-
-    // In a real application, you would send this token via email
-    // For development purposes, we're returning it directly
-    // Example email sending code is commented out below:
-
-    /*
-    await sendEmail({
-      email: admin.email,
-      subject: 'Your password reset token (valid for 10 min)',
-      message: `Forgot your password? Submit a request with your new password to: ${resetURL}.\nIf you didn't forget your password, please ignore this email!`
-    });
-    */
 
     res.status(200).json({
       status: 'success',
-      message: 'If a user with that email exists, a password reset link has been sent.',
-      // Only include the token in development mode
-      ...(process.env.NODE_ENV === 'development' && {
-        resetToken,
-        resetURL
-      })
+      message: 'If an account with that email exists, a password reset link has been processed.',
+      ...(process.env.NODE_ENV === 'development' && { resetURL })
     });
   } catch (error) {
-    console.error('Error in forgot password:', error);
-
-    // If there was an error, reset the token fields
-    if (req.body.email) {
-      try {
-        const admin = await Admin.findOne({ email: req.body.email });
-        if (admin) {
-          admin.passwordResetToken = undefined;
-          admin.passwordResetExpires = undefined;
-          await admin.save();
-        }
-      } catch (err) {
-        console.error('Error cleaning up reset token after failure:', err);
-      }
-    }
-
     res.status(500).json({
       status: 'error',
-      message: 'Error processing forgot password request. Please try again later.',
-      ...(process.env.NODE_ENV === 'development' && { error: error.message })
+      message: 'Error processing forgot password request.',
+      error: error.message
     });
   }
 };
 
+// Reset administrator password using a valid reset token
 export const resetPassword = async (req, res) => {
   try {
     const { token } = req.params;
     const { password } = req.body;
 
-    if (!token) {
+    if (!token || !password) {
       return res.status(400).json({
         status: 'error',
-        message: 'Reset token is required'
-      });
-    }
-
-    if (!password) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'New password is required'
+        message: 'Reset token and new password are required'
       });
     }
 
@@ -383,8 +336,6 @@ export const resetPassword = async (req, res) => {
         message: 'Password must be at least 8 characters long'
       });
     }
-
-    console.log(`Processing password reset with token: ${token.substring(0, 8)}...`);
 
     const hashedToken = crypto
       .createHash('sha256')
@@ -397,7 +348,6 @@ export const resetPassword = async (req, res) => {
     });
 
     if (!admin) {
-      console.log(`Invalid or expired reset token: ${token.substring(0, 8)}...`);
       return res.status(400).json({
         status: 'error',
         message: 'Invalid or expired reset token'
@@ -407,24 +357,24 @@ export const resetPassword = async (req, res) => {
     admin.password = password;
     admin.passwordResetToken = undefined;
     admin.passwordResetExpires = undefined;
+    admin.failedLoginAttempts = 0;
+    admin.accountLockedUntil = undefined;
     await admin.save();
-
-    console.log(`Password reset successful for admin: ${admin.name}`);
 
     res.status(200).json({
       status: 'success',
       message: 'Password reset successful. You can now log in with your new password.'
     });
   } catch (error) {
-    console.error('Error in reset password:', error);
     res.status(500).json({
       status: 'error',
-      message: 'Error resetting password. Please try again later.',
-      ...(process.env.NODE_ENV === 'development' && { error: error.message })
+      message: 'Error resetting password.',
+      error: error.message
     });
   }
 };
 
+// Update current admin password when logged in
 export const updatePassword = async (req, res) => {
   try {
     if (!req.admin || !req.admin._id) {
@@ -448,19 +398,13 @@ export const updatePassword = async (req, res) => {
 
     res.status(200).json({ message: 'Password updated successfully' });
   } catch (error) {
-    console.error('Error updating password:', error);
-    res.status(500).json({ message: 'Error updating password', error });
+    res.status(500).json({ message: 'Error updating password', error: error.message });
   }
 };
 
+// Update current admin profile name and email
 export const updateProfile = async (req, res) => {
   try {
-    console.log('Profile update request:', {
-      userId: req.admin?._id,
-      userRole: req.admin?.role,
-      requestBody: req.body
-    });
-
     if (!req.admin || !req.admin._id) {
       return res.status(401).json({ message: 'Authentication required' });
     }
@@ -472,20 +416,16 @@ export const updateProfile = async (req, res) => {
       return res.status(404).json({ message: 'Admin not found' });
     }
 
-    // Store original values for comparison
     const originalEmail = admin.email;
+    admin.name = name ? String(name).trim() : admin.name;
 
-    // Update fields
-    admin.name = name || admin.name;
-
-    // Only update email if it's changed and provided
     if (email && email !== originalEmail) {
-      // Check if email already exists for another user
-      const existingAdmin = await Admin.findOne({ email, _id: { $ne: admin._id } });
+      const normalizedEmail = String(email).trim().toLowerCase();
+      const existingAdmin = await Admin.findOne({ email: normalizedEmail, _id: { $ne: admin._id } });
       if (existingAdmin) {
         return res.status(400).json({ message: 'Email already in use by another account' });
       }
-      admin.email = email;
+      admin.email = normalizedEmail;
     }
 
     await admin.save();
@@ -501,28 +441,24 @@ export const updateProfile = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error updating profile:', error);
     res.status(500).json({ message: 'Error updating profile', error: error.message });
   }
 };
 
+// Generate student QR code image by student ID
 export const generateStudentQRCode = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid student ID' });
+    }
 
     const student = await Student.findById(id);
-
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
     }
 
-    // Generate QR code using qrToken (secure) or fallback to numericCode for backward compatibility
-    let codeToEncode = student.qrToken;
-    if (!codeToEncode) {
-      codeToEncode = mongoIdToNumericCode(student._id.toString());
-    }
-
-    // Generate QR code with the token/code
+    let codeToEncode = student.qrToken || mongoIdToNumericCode(student._id.toString());
     const qrCode = await generateQRCode(codeToEncode);
 
     const base64Data = qrCode.replace(/^data:image\/png;base64,/, '');
@@ -531,19 +467,20 @@ export const generateStudentQRCode = async (req, res) => {
     res.set('Content-Type', 'image/png');
     res.set('Content-Disposition', `inline; filename="${student.indexNumber}-${student.name}.png"`);
     return res.send(imageBuffer);
-
   } catch (error) {
-    console.error('Error generating student QR code:', error);
     return res.status(500).json({ message: 'Failed to generate QR code', error: error.message });
   }
 };
 
+// Generate student QR code image by index number
 export const getStudentQRByIndex = async (req, res) => {
   try {
     const { indexNumber } = req.params;
+    if (!indexNumber) {
+      return res.status(400).json({ success: false, message: 'Index number is required' });
+    }
 
-    const student = await Student.findOne({ indexNumber: indexNumber.toUpperCase() });
-
+    const student = await Student.findOne({ indexNumber: String(indexNumber).trim().toUpperCase() });
     if (!student) {
       return res.status(404).json({
         success: false,
@@ -551,13 +488,7 @@ export const getStudentQRByIndex = async (req, res) => {
       });
     }
 
-    // Generate QR code using qrToken (secure) or fallback to numericCode for backward compatibility
-    let codeToEncode = student.qrToken;
-    if (!codeToEncode) {
-      codeToEncode = mongoIdToNumericCode(student._id.toString());
-    }
-
-    // Generate QR code with the token/code
+    let codeToEncode = student.qrToken || mongoIdToNumericCode(student._id.toString());
     const qrCode = await generateQRCode(codeToEncode);
 
     const base64Data = qrCode.replace(/^data:image\/png;base64,/, '');
@@ -566,9 +497,7 @@ export const getStudentQRByIndex = async (req, res) => {
     res.set('Content-Type', 'image/png');
     res.set('Content-Disposition', `inline; filename="${student.indexNumber}-${student.name}.png"`);
     return res.send(imageBuffer);
-
   } catch (error) {
-    console.error('Error getting student QR code:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to get QR code',
@@ -577,24 +506,17 @@ export const getStudentQRByIndex = async (req, res) => {
   }
 };
 
+// Fetch recent attendance logs for today
 export const getRecentAttendance = async (req, res) => {
   try {
-    // Get today's date range in Sri Lanka timezone
     const now = DateTime.now().setZone('Asia/Colombo');
     const startOfDay = now.startOf('day').toJSDate();
     const endOfDay = now.endOf('day').toJSDate();
 
-    console.log('Fetching attendance for:', {
-      startOfDay,
-      endOfDay,
-      currentTime: now.toJSDate()
-    });
-
-    // Find students with attendance records for today
     const students = await Student.aggregate([
       {
         $match: {
-          "attendanceHistory.date": { $gte: startOfDay, $lte: endOfDay }
+          'attendanceHistory.date': { $gte: startOfDay, $lte: endOfDay }
         }
       },
       {
@@ -605,22 +527,21 @@ export const getRecentAttendance = async (req, res) => {
           status: 1,
           todayAttendance: {
             $filter: {
-              input: "$attendanceHistory",
-              as: "record",
+              input: '$attendanceHistory',
+              as: 'record',
               cond: {
                 $and: [
-                  { $gte: ["$$record.date", startOfDay] },
-                  { $lte: ["$$record.date", endOfDay] }
+                  { $gte: ['$$record.date', startOfDay] },
+                  { $lte: ['$$record.date', endOfDay] }
                 ]
               }
             }
           },
-          lastMessage: { $slice: ["$messages", -1] }
+          lastMessage: { $slice: ['$messages', -1] }
         }
       }
     ]);
 
-    // Process records in memory (much smaller set now)
     const processedRecords = students.map(student => {
       const todayRecords = student.todayAttendance || [];
       
@@ -643,36 +564,18 @@ export const getRecentAttendance = async (req, res) => {
       };
     });
 
-    // Sort by most recent activity
     const sortedRecords = processedRecords.sort((a, b) => {
       const timeA = a.timestamp || new Date(0);
       const timeB = b.timestamp || new Date(0);
       return new Date(timeB) - new Date(timeA);
     });
 
-    // Calculate statistics
     const stats = {
       totalCount: processedRecords.length,
       presentCount: processedRecords.filter(r => r.status === 'entered' || r.status === 'present').length,
       absentCount: processedRecords.filter(r => r.status === 'absent').length,
       leftCount: processedRecords.filter(r => r.status === 'left').length
     };
-
-    // Check if we have any attendance records for today
-    if (sortedRecords.length === 0) {
-      return res.status(200).json({
-        status: 'success',
-        message: 'No attendance records for today',
-        students: [],
-        stats: {
-          totalCount: 0,
-          presentCount: 0,
-          absentCount: 0,
-          leftCount: 0
-        },
-        timestamp: now.toJSDate()
-      });
-    }
 
     res.status(200).json({
       status: 'success',
@@ -682,7 +585,6 @@ export const getRecentAttendance = async (req, res) => {
       timestamp: now.toJSDate()
     });
   } catch (error) {
-    console.error('Error in getRecentAttendance:', error);
     res.status(500).json({
       status: 'error',
       message: 'Failed to retrieve recent attendance records',

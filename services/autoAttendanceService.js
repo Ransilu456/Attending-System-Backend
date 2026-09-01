@@ -1,7 +1,7 @@
 import { logInfo, logWarning, logError } from '../utils/terminal.js';
 import Student from '../models/student.model.js';
 
-
+// Automatically mark exit attendance for all active visits today
 export const autoMarkLeaveAttendance = async () => {
   try {
     logInfo('Starting automatic leave attendance marking process...');
@@ -43,7 +43,6 @@ export const autoMarkLeaveAttendance = async () => {
 
         student.attendanceHistory[todayAttendanceIndex].leaveTime = leaveTime;
         student.attendanceHistory[todayAttendanceIndex].status = 'left';
-
         student.lastAttendance = leaveTime;
 
         const totalRecords = student.attendanceHistory.length;
@@ -56,7 +55,6 @@ export const autoMarkLeaveAttendance = async () => {
           : 0;
 
         await student.save();
-
         logInfo(`Successfully marked leave attendance for student: ${student.name}`);
       } catch (error) {
         logError(`Error processing student ${student.name}: ${error.message}`);
@@ -70,6 +68,7 @@ export const autoMarkLeaveAttendance = async () => {
   }
 };
 
+// Check and resolve unclosed attendance records across previous days
 export const checkAllPastAttendance = async () => {
   try {
     logInfo('Checking all past attendance records...');
@@ -124,7 +123,6 @@ export const checkAllPastAttendance = async () => {
             : 0;
 
           await student.save();
-
           logInfo(`Successfully marked past attendance for student: ${student.name}`);
         }
       } catch (error) {
@@ -139,9 +137,9 @@ export const checkAllPastAttendance = async () => {
   }
 };
 
+// Check and mark incomplete attendance records specifically from yesterday
 export const checkPreviousDayAttendance = async () => {
   try {
-
     await checkAllPastAttendance();
 
     logInfo('Checking previous day attendance records...');
@@ -185,7 +183,6 @@ export const checkPreviousDayAttendance = async () => {
 
         student.attendanceHistory[attendanceIndex].leaveTime = leaveTime;
         student.attendanceHistory[attendanceIndex].status = 'left';
-
         student.lastAttendance = leaveTime;
 
         const totalRecords = student.attendanceHistory.length;
@@ -198,7 +195,6 @@ export const checkPreviousDayAttendance = async () => {
           : 0;
 
         await student.save();
-
         logInfo(`Successfully marked previous day attendance for student: ${student.name}`);
       } catch (error) {
         logError(`Error processing previous day attendance for student ${student.name}: ${error.message}`);
@@ -212,6 +208,7 @@ export const checkPreviousDayAttendance = async () => {
   }
 };
 
+// Periodically transition stagnant or inactive student accounts
 export const updateStudentStatuses = async () => {
   try {
     logInfo('Starting student status update process...');
@@ -222,9 +219,6 @@ export const updateStudentStatuses = async () => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    // Find active students to mark as inactive based on:
-    // 1. Registered > 7 days ago and 0 attendance records
-    // 2. Registered > 30 days ago and <= 1 attendance record
     const students = await Student.find({
       status: 'active',
       $or: [

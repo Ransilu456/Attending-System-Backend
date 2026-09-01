@@ -3,6 +3,7 @@ import Admin from '../models/admin.model.js';
 import Student from '../models/student.model.js';
 import AppError from '../utils/appError.js';
 
+// Verify admin JWT authentication token and account status
 export const protect = async (req, res, next) => {
   try {
     let token;
@@ -13,6 +14,10 @@ export const protect = async (req, res, next) => {
     if (!token) {
       return next(new AppError('You are not logged in. Please log in to get access.', 401));
     }
+
+    if (!process.env.JWT_SECRET) {
+      return next(new AppError('Server authentication configuration error.', 500));
+    }
  
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
@@ -21,30 +26,36 @@ export const protect = async (req, res, next) => {
       return next(new AppError('The user belonging to this token no longer exists.', 401));
     }
 
+    if (!admin.isActive) {
+      return next(new AppError('This account has been deactivated.', 401));
+    }
+
     if (admin.changedPasswordAfter(decoded.iat)) {
       return next(new AppError('User recently changed password! Please log in again.', 401));
     }
 
     if (admin.accountLockedUntil && admin.accountLockedUntil > Date.now()) {
-      return next(new AppError('Account is locked. Please try again later.', 401));
+      return next(new AppError('Account is temporarily locked. Please try again later.', 401));
     }
 
     req.admin = admin;
     next();
-  } catch (error) {
-    next(new AppError('Invalid token. Please log in again.', 401));
+  } catch {
+    next(new AppError('Invalid or expired token. Please log in again.', 401));
   }
 };
 
+// Restrict endpoint access to specific authorized user roles
 export const restrictTo = (...roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.admin.role)) {
+    if (!req.admin || !roles.includes(req.admin.role)) {
       return next(new AppError('You do not have permission to perform this action.', 403));
     }
     next();
   };
 };
 
+// Verify student JWT authentication token and active status
 export const verifyStudent = async (req, res, next) => {
   try {
     let token;
@@ -54,6 +65,10 @@ export const verifyStudent = async (req, res, next) => {
 
     if (!token) {
       return next(new AppError('You are not logged in. Please log in to get access.', 401));
+    }
+
+    if (!process.env.JWT_SECRET) {
+      return next(new AppError('Server authentication configuration error.', 500));
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -69,45 +84,29 @@ export const verifyStudent = async (req, res, next) => {
 
     req.student = student;
     next();
-  } catch (error) {
-    next(new AppError('Invalid token. Please log in again.', 401));
+  } catch {
+    next(new AppError('Invalid or expired token. Please log in again.', 401));
   }
 };
 
+// Verify that the authenticated user possesses admin or superadmin privileges
 export const isAdmin = (req, res, next) => {
   try {
-    console.log('isAdmin middleware - admin check:', req.admin);
-    
     if (!req.admin) {
-      return res.status(401).json({ message: 'Not authenticated' });
+      return res.status(401).json({ status: 'fail', message: 'Not authenticated' });
     }
     
     if (req.admin.role !== 'admin' && req.admin.role !== 'superadmin') {
-      console.log('Access denied - User role:', req.admin.role);
-      return res.status(403).json({ message: 'Admin access required' });
+      return res.status(403).json({ status: 'fail', message: 'Admin access required' });
     }
     
     next();
-  } catch (error) {
-    console.error('isAdmin middleware error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+  } catch {
+    res.status(500).json({ status: 'error', message: 'Server authorization error' });
   }
 };
 
-export const isDeveloper = (req, res, next) => {
-  try {
-    if (!req.admin) {
-      return res.status(401).json({ message: 'Not authenticated' });
-    }
-    if (req.admin.role !== 'developer') {
-      return res.status(403).json({ message: 'Developer access required' });
-    }
-    next();
-  } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-};
-
+// Centralized Express error handling middleware
 export const errorHandler = (err, req, res, next) => {
   err.statusCode = err.statusCode || 500;
   err.status = err.status || 'error';
@@ -115,22 +114,20 @@ export const errorHandler = (err, req, res, next) => {
   if (process.env.NODE_ENV === 'development') {
     res.status(err.statusCode).json({
       status: err.status,
-      error: err,
       message: err.message,
       stack: err.stack
     });
   } else {
+    // Production mode: never leak internal exceptions or database traces
     if (err.isOperational) {
       res.status(err.statusCode).json({
         status: err.status,
         message: err.message
       });
     } else {
-
-      console.error('ERROR 💥', err);
       res.status(500).json({
         status: 'error',
-        message: 'Something went wrong!'
+        message: 'Internal server error'
       });
     }
   }

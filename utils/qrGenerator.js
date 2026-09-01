@@ -1,12 +1,9 @@
 import QRCode from 'qrcode';
 
-/**
- * @param {string} data 
- * @returns {Promise<string>} 
- */
+// Generate a base64 Data URL for a given QR string payload
 export const generateQRCode = async (data) => {
   try {
-    const qrCode = await QRCode.toDataURL(data, {
+    const qrCode = await QRCode.toDataURL(String(data), {
       errorCorrectionLevel: 'M',
       margin: 1,
       width: 400,
@@ -17,8 +14,7 @@ export const generateQRCode = async (data) => {
     });
     return qrCode;
   } catch (error) {
-    console.error('Error generating QR code:', error);
-    throw error;
+    throw new Error(`Failed to generate QR code: ${error.message}`);
   }
 };
 

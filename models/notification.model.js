@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 
+// Notification document schema
 const notificationSchema = new mongoose.Schema({
   title: {
     type: String,
@@ -23,7 +24,7 @@ const notificationSchema = new mongoose.Schema({
     enum: ['announcement', 'reminder', 'alert', 'info'],
     default: 'announcement',
   },
-  // Empty array = broadcast to all students
+  // Targeted students array (empty means broadcast to all)
   targetStudents: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Student',
@@ -33,7 +34,7 @@ const notificationSchema = new mongoose.Schema({
     ref: 'Admin',
     required: true,
   },
-  // Track per-student read status
+  // Read receipt list per student
   readBy: [{
     student: {
       type: mongoose.Schema.Types.ObjectId,
@@ -52,10 +53,11 @@ const notificationSchema = new mongoose.Schema({
   timestamps: true,
 });
 
-// Indexes for efficient queries
+// Database indexes for fast querying
 notificationSchema.index({ isActive: 1, createdAt: -1 });
 notificationSchema.index({ targetStudents: 1 });
 notificationSchema.index({ 'readBy.student': 1 });
 
 const Notification = mongoose.model('Notification', notificationSchema);
+
 export default Notification;

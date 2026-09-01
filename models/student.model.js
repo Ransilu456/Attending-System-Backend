@@ -1,6 +1,7 @@
-import mongoose from 'mongoose'
-import validator from 'validator'
+import mongoose from 'mongoose';
+import validator from 'validator';
 
+// Student document schema definition
 const studentSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -68,7 +69,7 @@ const studentSchema = new mongoose.Schema({
         if (!v) return true;
         return v < new Date();
       },
-      message: props => `Date of birth must be in the past!`
+      message: () => 'Date of birth must be in the past!'
     }
   },
   profileImage: {
@@ -145,8 +146,7 @@ const studentSchema = new mongoose.Schema({
     min: [0, 'Percentage cannot be negative'],
     max: [100, 'Percentage cannot exceed 100']
   },
-  messages: [
-  {
+  messages: [{
     type: {
       type: String,
       enum: ['whatsapp', 'email', 'sms'],
@@ -165,26 +165,27 @@ const studentSchema = new mongoose.Schema({
       type: Date,
       default: Date.now
     }
-  }
-],
-
+  }],
 }, { 
   timestamps: true,
   toJSON: { virtuals: true },
   toObject: { virtuals: true }
 });
 
+// Normalize parent telephone number before saving
 studentSchema.pre('save', function(next) {
-  if (this.isModified('parent_telephone')) {
+  if (this.isModified('parent_telephone') && this.parent_telephone) {
     this.parent_telephone = this.parent_telephone.replace(/[\s-]/g, '');
   }
   next();
 });
 
+// Database indexes for optimized lookup
 studentSchema.index({ 'attendanceHistory.date': 1 });
 studentSchema.index({ createdAt: -1 });
 studentSchema.index({ status: 1 });
 
+// Virtual getter to calculate student age
 studentSchema.virtual('age').get(function() {
   if (!this.dateOfBirth) return null;
   const today = new Date();
@@ -197,6 +198,7 @@ studentSchema.virtual('age').get(function() {
   return age;
 });
 
+// Virtual getter to calculate overall attendance percentage
 studentSchema.virtual('calculateAttendancePercentage').get(function() {
   if (!this.attendanceHistory || this.attendanceHistory.length === 0) return 0;
   const presentCount = this.attendanceHistory.filter(record =>
@@ -205,6 +207,7 @@ studentSchema.virtual('calculateAttendancePercentage').get(function() {
   return (presentCount / this.attendanceHistory.length) * 100;
 });
 
+// Mark student entry/exit attendance and recalculate rates
 studentSchema.methods.markAttendance = async function(status, adminId = null, deviceInfo = null, scanLocation = 'Main Entrance') {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -226,7 +229,6 @@ studentSchema.methods.markAttendance = async function(status, adminId = null, de
     
     if (status === 'entered' || status === 'present') {
       newRecord.entryTime = now;
-      
       if (status === 'present') {
         this.attendanceCount += 1;
       }
@@ -235,15 +237,13 @@ studentSchema.methods.markAttendance = async function(status, adminId = null, de
     }
     
     this.attendanceHistory.push(newRecord);
-  } 
-  else {
+  } else {
     const todayRecord = this.attendanceHistory[todayAttendanceIndex];
     
     if (status === 'left') {
       todayRecord.leaveTime = now;
       todayRecord.status = status;
-    } 
-    else if (status === 'entered' || status === 'present') {
+    } else if (status === 'entered' || status === 'present') {
       if (!todayRecord.entryTime) {
         todayRecord.entryTime = now;
       }
@@ -277,6 +277,7 @@ studentSchema.methods.markAttendance = async function(status, adminId = null, de
   return this;
 };
 
+// Compute attendance summary statistics within a date range
 studentSchema.methods.getAttendanceStats = function(startDate, endDate) {
   const records = this.attendanceHistory.filter(record => 
     record.date >= startDate && record.date <= endDate
@@ -306,6 +307,7 @@ studentSchema.methods.getAttendanceStats = function(startDate, endDate) {
   return stats;
 };
 
+// Reset all attendance history and metrics for this student
 studentSchema.methods.clearAttendanceHistory = async function() {
   this.attendanceHistory = [];
   this.attendanceCount = 0;
@@ -315,6 +317,7 @@ studentSchema.methods.clearAttendanceHistory = async function() {
   return this;
 };
 
+// Remove a specific attendance log entry by its subdocument ID
 studentSchema.methods.deleteAttendanceRecord = async function(recordId) {
   const recordIndex = this.attendanceHistory.findIndex(
     record => record._id.toString() === recordId
@@ -325,7 +328,6 @@ studentSchema.methods.deleteAttendanceRecord = async function(recordId) {
   }
   
   const deletedRecord = this.attendanceHistory[recordIndex];
-  
   this.attendanceHistory.splice(recordIndex, 1);
   
   if (deletedRecord.status === 'present' || deletedRecord.status === 'entered') {
@@ -352,68 +354,6 @@ studentSchema.methods.deleteAttendanceRecord = async function(recordId) {
   
   await this.save();
   return { deletedRecord, updatedStudent: this };
-};
-
-studentSchema.methods.getFilteredAttendanceHistory = function(options = {}) {
-  const { 
-    startDate = null, 
-    endDate = null, 
-    limit = null, 
-    offset = 0, 
-    sortBy = 'date', 
-    sortOrder = 'desc' 
-  } = options;
-  
-  let filteredHistory = [...this.attendanceHistory];
-
-  if (startDate) {
-    const start = new Date(startDate);
-    filteredHistory = filteredHistory.filter(record => 
-      new Date(record.date) >= start
-    );
-  }
-  
-  if (endDate) {
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999); // End of the day
-    filteredHistory = filteredHistory.filter(record => 
-      new Date(record.date) <= end
-    );
-  }
-
-  const order = sortOrder === 'asc' ? 1 : -1;
-  
-  filteredHistory.sort((a, b) => {
-    if (sortBy === 'date') {
-      return order * (new Date(a.date) - new Date(b.date));
-    }
-    if (a[sortBy] < b[sortBy]) return -1 * order;
-    if (a[sortBy] > b[sortBy]) return 1 * order;
-    return 0;
-  });
-
-  const totalCount = filteredHistory.length;
-
-  let paginatedHistory = filteredHistory;
-  if (limit !== null) {
-    const start = parseInt(offset, 10) || 0;
-    const size = parseInt(limit, 10);
-    paginatedHistory = filteredHistory.slice(start, start + size);
-  }
-
-  const stats = {
-    totalCount: this.attendanceHistory.length,
-    filteredCount: totalCount,
-    presentCount: this.attendanceHistory.filter(r => r.status === 'present' || r.status === 'entered' || r.status === 'left').length,
-    absentCount: this.attendanceHistory.filter(r => r.status === 'absent').length,
-    attendancePercentage: this.attendancePercentage
-  };
-  
-  return {
-    records: paginatedHistory,
-    totalRecords: totalCount,
-    stats
-  };
 };
 
 const Student = mongoose.model('Student', studentSchema);

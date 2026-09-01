@@ -3,10 +3,7 @@ import { numericCodeToMongoId } from '../utils/idConverter.js';
 import mongoose from 'mongoose';
 import { sendAttendanceNotificationLink } from '../controllers/messaging.controller.js';
 
-/**
- * @param {Object}
- * @param {Object}
- */
+// Retrieve student QR code string or image by student ID
 export const getStudentQRCode = async (req, res) => {
   try {
     const { studentId } = req.params;
@@ -18,10 +15,8 @@ export const getStudentQRCode = async (req, res) => {
       });
     }
 
-    // Find the student's QR code in the database - check both fields
     const student = await Student.findById(studentId).select('qrCodeData qrCode');
 
-    // If student doesn't exist
     if (!student) {
       return res.status(404).json({
         success: false,
@@ -29,10 +24,8 @@ export const getStudentQRCode = async (req, res) => {
       });
     }
 
-    // Check if student has either qrCodeData or qrCode field
     const qrData = student.qrCodeData || student.qrCode;
 
-    // If student doesn't have any QR code data
     if (!qrData) {
       return res.status(404).json({
         success: false,
@@ -41,14 +34,12 @@ export const getStudentQRCode = async (req, res) => {
       });
     }
 
-    // Return the QR code data
     return res.status(200).json({
       success: true,
       message: 'QR code data retrieved successfully',
       data: qrData
     });
   } catch (error) {
-    console.error('Error retrieving QR code data:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to retrieve QR code data',
@@ -57,10 +48,7 @@ export const getStudentQRCode = async (req, res) => {
   }
 };
 
-/**
- * @param {Object}
- * @param {Object}
- */
+// Store generated QR code string to a student document
 export const saveQRCode = async (req, res) => {
   try {
     const { studentId } = req.params;
@@ -80,12 +68,10 @@ export const saveQRCode = async (req, res) => {
       });
     }
 
-    // Determine which field to update based on the format of qrData
     const updateField = typeof qrData === 'string' && qrData.startsWith('data:image')
       ? { qrCode: qrData }
       : { qrCodeData: qrData };
 
-    // Find the student and update their QR code data
     const student = await Student.findByIdAndUpdate(
       studentId,
       updateField,
@@ -110,7 +96,6 @@ export const saveQRCode = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error saving QR code data:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to save QR code data',
@@ -119,10 +104,7 @@ export const saveQRCode = async (req, res) => {
   }
 };
 
-/**
- * @param {Object} req
- * @param {Object} res
- */
+// Process QR code scan, identify student, and record attendance
 export const markAttendanceQR = async (req, res) => {
   try {
     const { qrData } = req.body;
@@ -151,40 +133,36 @@ export const markAttendanceQR = async (req, res) => {
       });
     }
 
-    // 1. Try secure token format (32-character hex)
+    // Lookup student by 32-character secure token
     if (/^[0-9a-fA-F]{32}$/.test(code)) {
-      console.log(`Searching student by secure token: ${code}`);
       student = await Student.findOne({ qrToken: code })
         .select('name indexNumber student_email parent_email parent_telephone address age status attendanceHistory messages lastAttendance attendancePercentage attendanceCount')
         .lean();
     }
 
-    // 2. Try raw MongoDB ID format (24-character hex)
+    // Lookup student by 24-character hex MongoDB ObjectId
     if (!student && /^[0-9a-fA-F]{24}$/.test(code)) {
-      console.log(`Searching student by raw ObjectId: ${code}`);
       student = await Student.findById(code)
         .select('name indexNumber student_email parent_email parent_telephone address age status attendanceHistory messages lastAttendance attendancePercentage attendanceCount')
         .lean();
     }
 
-    // 3. Try space-separated numeric format converting to MongoId
+    // Lookup student by formatted 8-group numeric code
     if (!student && /^\d{4}(\s+\d{4}){7}$/.test(code)) {
       try {
         const idFromCode = numericCodeToMongoId(code);
         if (mongoose.Types.ObjectId.isValid(idFromCode)) {
-          console.log(`Searching student by numeric code converted to ID: ${idFromCode}`);
           student = await Student.findById(idFromCode)
             .select('name indexNumber student_email parent_email parent_telephone address age status attendanceHistory messages lastAttendance attendancePercentage attendanceCount')
             .lean();
         }
-      } catch (err) {
-        console.error('Failed to convert numeric code:', err);
+      } catch {
+        // Continue fallback search
       }
     }
 
-    // 4. Fallback search by indexNumber
-    if (!student) {
-      console.log(`Searching student by index number fallback: ${code}`);
+    // Fallback lookup by sanitized alphanumeric indexNumber
+    if (!student && /^[A-Za-z0-9_-]+$/.test(code)) {
       student = await Student.findOne({ indexNumber: code.toUpperCase() })
         .select('name indexNumber student_email parent_email parent_telephone address age status attendanceHistory messages lastAttendance attendancePercentage attendanceCount')
         .lean();
@@ -234,7 +212,7 @@ export const markAttendanceQR = async (req, res) => {
       {
         $set: { 
           lastAttendance: now,
-          status: 'active' // Automatically reactivate on scan
+          status: 'active'
         },
         $inc: {
           attendanceCount: (status === 'entered' && (!todayAttendance || todayAttendance.status === 'left')) ? 1 : 0
@@ -284,10 +262,6 @@ export const markAttendanceQR = async (req, res) => {
       });
     }
 
-    const latestMessage = student.messages && student.messages.length > 0
-      ? student.messages[student.messages.length - 1]
-      : null;
-
     const finalStudent = await Student.findById(studentId)
       .select('name indexNumber student_email parent_email parent_telephone address age status attendanceCount attendancePercentage messages')
       .lean();
@@ -308,12 +282,12 @@ export const markAttendanceQR = async (req, res) => {
           status: updatedStudent.status || student.status,
           attendanceCount: updatedStudent.attendanceCount || student.attendanceCount || 0,
           attendancePercentage: updatedStudent.attendancePercentage || student.attendancePercentage || 0,
-          messages: finalStudent.messages || []
+          messages: finalStudent?.messages || []
         },
         attendance: {
           current: attendanceRecord,
           today: todayAttendance ? {
-            status: status,
+            status,
             entryTime: todayAttendance.entryTime,
             leaveTime: status === 'left' ? now : todayAttendance.leaveTime,
             scanLocation: todayAttendance.scanLocation
@@ -325,8 +299,6 @@ export const markAttendanceQR = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error processing QR code:', error);
-
     if (error instanceof mongoose.Error.CastError) {
       return res.status(400).json({
         success: false,
@@ -338,15 +310,13 @@ export const markAttendanceQR = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Error processing QR code',
-      details: 'An unexpected error occurred while processing the QR code',
       error: error.message
     });
   }
 };
 
-
 export default {
   markAttendanceQR,
   getStudentQRCode,
   saveQRCode
-}; 
+};
