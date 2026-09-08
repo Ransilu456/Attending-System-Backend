@@ -28,7 +28,19 @@ const qrLimiter = rateLimit({
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
-  message: { status: 'fail', message: 'Too many login attempts. Please try again later.' }
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res, next, options) => {
+    const resetTime = req.rateLimit?.resetTime;
+    const retryAfterSeconds = resetTime ? Math.max(1, Math.ceil((resetTime.getTime() - Date.now()) / 1000)) : 900;
+    res.setHeader('Retry-After', retryAfterSeconds);
+    res.status(429).json({
+      status: 'fail',
+      success: false,
+      message: 'Too many login attempts. Please try again later.',
+      retryAfter: retryAfterSeconds
+    });
+  }
 });
 
 // Admin-managed student profile & statistics routes

@@ -53,7 +53,7 @@ app.use(cors({
     'time-format',
     'Accept'
   ],
-  exposedHeaders: ['Content-Disposition'],
+  exposedHeaders: ['Content-Disposition', 'Retry-After', 'RateLimit-Reset', 'RateLimit-Remaining', 'RateLimit-Limit'],
   preflightContinue: false,
   maxAge: 3600,
   optionsSuccessStatus: 200,
