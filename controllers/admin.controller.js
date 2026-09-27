@@ -7,16 +7,17 @@ import dotenv from 'dotenv';
 import { DateTime } from 'luxon';
 import { generateQRCode } from '../utils/qrGenerator.js';
 import { mongoIdToNumericCode } from '../utils/idConverter.js';
+import { maskId, resolveId } from '../utils/idMask.js';
 
 dotenv.config();
+
+function safeError(err) {
+  return process.env.NODE_ENV === 'development' ? err.message : 'An error occurred';
+}
 
 // Register a new administrator account 
 export const registerAdmin = async (req, res) => {
   const { name, email, password } = req.body;
-
-  if (!name || !email || !password) {
-    return res.status(400).json({ message: 'Please provide all required fields.' });
-  }
 
   const normalizedEmail = String(email).trim().toLowerCase();
   const existingAdmin = await Admin.findOne({ email: normalizedEmail });
@@ -24,7 +25,6 @@ export const registerAdmin = async (req, res) => {
     return res.status(400).json({ message: 'Admin account already exists with this email.' });
   }
 
-  // Security: Prevent unauthenticated privilege escalation to superadmin
   const newAdmin = new Admin({
     name: String(name).trim(),
     email: normalizedEmail,
@@ -36,17 +36,13 @@ export const registerAdmin = async (req, res) => {
     await newAdmin.save();
     res.status(201).json({ message: 'Admin registered successfully.' });
   } catch (error) {
-    res.status(500).json({ message: 'Error registering admin.', error: error.message });
+    res.status(500).json({ message: 'Error registering admin.', error: safeError(error) });
   }
 };
 
 // Authenticate administrator credentials and issue JWT
 export const loginAdmin = async (req, res) => {
   const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ message: 'Please provide both email and password.' });
-  }
 
   try {
     const normalizedEmail = String(email).trim().toLowerCase();
@@ -75,8 +71,8 @@ export const loginAdmin = async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: admin._id, role: admin.role }, 
-      process.env.JWT_SECRET, 
+      { id: admin._id, role: admin.role },
+      process.env.JWT_SECRET,
       { expiresIn: '8h' }
     );
 
@@ -85,14 +81,15 @@ export const loginAdmin = async (req, res) => {
       message: 'Login successful',
       token,
       admin: {
-        id: admin._id,
+        id: maskId(admin._id),
+        _id: maskId(admin._id),
         name: admin.name,
         email: admin.email,
         role: admin.role,
       },
     });
-  } catch (error) {
-    res.status(500).json({ message: 'Error logging in admin.', error: error.message });
+  } catch {
+    res.status(500).json({ message: 'Login failed. Please try again.' });
   }
 };
 
@@ -103,52 +100,57 @@ export const logoutAdmin = async (req, res) => {
       status: 'success',
       message: 'Logged out successfully'
     });
-  } catch (error) {
+  } catch {
     return res.status(500).json({
       status: 'error',
-      message: 'An error occurred during logout',
-      error: error.message
+      message: 'An error occurred during logout'
     });
   }
 };
 
 // Retrieve authenticated admin user details
 export const getAdminDetails = async (req, res) => {
-  const adminId = req.admin?.id || req.admin?._id;
-
   try {
-    const admin = await Admin.findById(adminId).select('-password');
+    const admin = await Admin.findById(req.admin._id).select('-password');
     if (!admin) {
       return res.status(404).json({ message: 'Admin not found' });
     }
-
-    res.status(200).json(admin);
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching admin details.', error: error.message });
+    res.status(200).json({
+      id: maskId(admin._id),
+      _id: maskId(admin._id),
+      name: admin.name,
+      email: admin.email,
+      role: admin.role,
+      lastLogin: admin.lastLogin,
+      isActive: admin.isActive
+    });
+  } catch {
+    res.status(500).json({ message: 'Error fetching admin details.' });
   }
 };
 
 // Query paginated and searchable students list
 export const getStudents = async (req, res) => {
   try {
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 20;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const skip = (page - 1) * limit;
-    const search = req.query.search ? String(req.query.search).trim() : '';
+    const search = req.query.search ? String(req.query.search).trim().slice(0, 100) : '';
 
     let query = {};
     if (search) {
+      const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query = {
         $or: [
-          { name: { $regex: search, $options: 'i' } },
-          { indexNumber: { $regex: search, $options: 'i' } },
-          { student_email: { $regex: search, $options: 'i' } }
+          { name: { $regex: safeSearch, $options: 'i' } },
+          { indexNumber: { $regex: safeSearch, $options: 'i' } },
+          { student_email: { $regex: safeSearch, $options: 'i' } }
         ]
       };
     }
 
     const students = await Student.find(query)
-      .select('-attendanceHistory -messages')
+      .select('-attendanceHistory -messages -qrCode -qrToken')
       .skip(skip)
       .limit(limit)
       .sort({ createdAt: -1 })
@@ -156,9 +158,9 @@ export const getStudents = async (req, res) => {
 
     const totalStudents = await Student.countDocuments(query);
 
-    res.status(200).json({ 
+    res.status(200).json({
       success: true,
-      students,
+      students: students.map(s => ({ ...s, _id: maskId(s._id) })),
       pagination: {
         total: totalStudents,
         page,
@@ -166,46 +168,53 @@ export const getStudents = async (req, res) => {
         pages: Math.ceil(totalStudents / limit)
       }
     });
-  } catch (err) {
-    res.status(500).json({ message: 'Error fetching students', error: err.message });
+  } catch {
+    res.status(500).json({ message: 'Error fetching students' });
   }
 };
 
 // Update an existing student record by ID
 export const updateStudent = async (req, res) => {
-  const { id } = req.params;
+  const id = resolveId(req.params.id);
   const updateData = req.body;
 
-  if (!mongoose.Types.ObjectId.isValid(id)) {
+  if (!id || !mongoose.Types.ObjectId.isValid(id)) {
     return res.status(400).json({ message: 'Invalid student ID' });
   }
 
+  // Strip fields that should never be client-updated
+  const safeFields = [
+    'name', 'address', 'student_email', 'parent_email',
+    'parent_telephone', 'indexNumber', 'dateOfBirth', 'profileImage', 'status'
+  ];
+  const safeUpdate = {};
+  for (const field of safeFields) {
+    if (updateData[field] !== undefined) safeUpdate[field] = updateData[field];
+  }
+
   try {
-    const student = await Student.findById(id);
+    const student = await Student.findByIdAndUpdate(
+      id, safeUpdate, { new: true, runValidators: true }
+    ).select('-qrCode -qrToken -attendanceHistory -messages');
+
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
     }
 
-    const updatedStudent = await Student.findByIdAndUpdate(
-      id,
-      updateData,
-      { new: true, runValidators: true }
-    );
-
     res.status(200).json({
       message: 'Student updated successfully',
-      student: updatedStudent
+      student: { ...student.toObject(), _id: maskId(student._id) }
     });
-  } catch (err) {
-    res.status(500).json({ message: 'Error updating student', error: err.message });
+  } catch {
+    res.status(500).json({ message: 'Error updating student' });
   }
 };
 
 // Permanently delete a student record by ID
 export const deleteStudent = async (req, res) => {
-  const { id } = req.params;
+  const id = resolveId(req.params.id);
 
-  if (!mongoose.Types.ObjectId.isValid(id)) {
+  if (!id || !mongoose.Types.ObjectId.isValid(id)) {
     return res.status(400).json({ message: 'Invalid student ID' });
   }
 
@@ -223,14 +232,16 @@ export const deleteStudent = async (req, res) => {
 // Fetch all student records excluding heavy history arrays
 export const getAllStudents = async (req, res) => {
   try {
-    const students = await Student.find().select('-attendanceHistory -messages').lean();
+    const students = await Student.find()
+      .select('-attendanceHistory -messages -qrCode -qrToken')
+      .lean();
 
     res.status(200).json({
       message: 'All students fetched successfully.',
-      students,
+      students: students.map(s => ({ ...s, _id: maskId(s._id) })),
     });
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching all students', error: error.message });
+  } catch {
+    res.status(500).json({ message: 'Error fetching all students' });
   }
 };
 
@@ -238,10 +249,6 @@ export const getAllStudents = async (req, res) => {
 export const registerStudent = async (req, res) => {
   try {
     const { name, address, student_email, parent_email, parent_telephone, indexNumber, dateOfBirth } = req.body;
-
-    if (!name || !address || !student_email || !parent_email || !parent_telephone || !indexNumber || !dateOfBirth) {
-      return res.status(400).json({ message: 'All fields are required' });
-    }
 
     const qrToken = crypto.randomBytes(16).toString('hex');
 
@@ -264,16 +271,20 @@ export const registerStudent = async (req, res) => {
     res.status(201).json({
       message: 'Student registered successfully',
       student: {
+        id: maskId(savedStudent._id),
+        _id: maskId(savedStudent._id),
         name: savedStudent.name,
         indexNumber: savedStudent.indexNumber,
         email: savedStudent.student_email,
         dateOfBirth: savedStudent.dateOfBirth,
-        _id: savedStudent._id
       },
       qrCode
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error registering student', error: error.message });
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'A student with this email or index number already exists.' });
+    }
+    res.status(500).json({ message: 'Error registering student' });
   }
 };
 
@@ -323,20 +334,6 @@ export const resetPassword = async (req, res) => {
     const { token } = req.params;
     const { password } = req.body;
 
-    if (!token || !password) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Reset token and new password are required'
-      });
-    }
-
-    if (password.length < 8) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Password must be at least 8 characters long'
-      });
-    }
-
     const hashedToken = crypto
       .createHash('sha256')
       .update(token)
@@ -365,11 +362,10 @@ export const resetPassword = async (req, res) => {
       status: 'success',
       message: 'Password reset successful. You can now log in with your new password.'
     });
-  } catch (error) {
+  } catch {
     res.status(500).json({
       status: 'error',
-      message: 'Error resetting password.',
-      error: error.message
+      message: 'Error resetting password.'
     });
   }
 };
@@ -410,14 +406,18 @@ export const updateProfile = async (req, res) => {
     }
 
     const { name, email } = req.body;
-    const admin = await Admin.findById(req.admin._id);
 
+    if (!name && !email) {
+      return res.status(400).json({ message: 'Name or email is required to update profile' });
+    }
+
+    const admin = await Admin.findById(req.admin._id);
     if (!admin) {
       return res.status(404).json({ message: 'Admin not found' });
     }
 
     const originalEmail = admin.email;
-    admin.name = name ? String(name).trim() : admin.name;
+    if (name) admin.name = String(name).trim();
 
     if (email && email !== originalEmail) {
       const normalizedEmail = String(email).trim().toLowerCase();
@@ -434,22 +434,22 @@ export const updateProfile = async (req, res) => {
       success: true,
       message: 'Profile updated successfully',
       admin: {
-        id: admin._id,
+        id: maskId(admin._id),
         name: admin.name,
         email: admin.email,
         role: admin.role
       }
     });
-  } catch (error) {
-    res.status(500).json({ message: 'Error updating profile', error: error.message });
+  } catch {
+    res.status(500).json({ message: 'Error updating profile' });
   }
 };
 
 // Generate student QR code image by student ID
 export const generateStudentQRCode = async (req, res) => {
   try {
-    const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    const id = resolveId(req.params.id);
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: 'Invalid student ID' });
     }
 
@@ -542,27 +542,28 @@ export const getRecentAttendance = async (req, res) => {
       }
     ]);
 
-    const processedRecords = students.map(student => {
-      const todayRecords = student.todayAttendance || [];
-      
-      const latestRecord = todayRecords.length > 0
-        ? todayRecords.reduce((latest, current) => {
-          return new Date(current.date) > new Date(latest.date) ? current : latest;
-        })
-        : null;
+    const processedRecords = students
+      .map(student => {
+        const todayRecords = student.todayAttendance || [];
+        const latestRecord = todayRecords.length > 0
+          ? todayRecords.reduce((latest, current) =>
+            new Date(current.date) > new Date(latest.date) ? current : latest
+          ) : null;
 
-      return {
-        _id: student._id,
-        name: student.name,
-        indexNumber: student.indexNumber,
-        email: student.student_email,
-        status: latestRecord?.status || 'absent',
-        entryTime: latestRecord?.entryTime || null,
-        leaveTime: latestRecord?.leaveTime || null,
-        timestamp: latestRecord?.date || null,
-        messageStatus: student.lastMessage?.[0]?.status || null
-      };
-    });
+        return {
+          id: maskId(student._id),
+          _id: maskId(student._id),
+          name: student.name,
+          indexNumber: student.indexNumber,
+          status: latestRecord?.status || 'absent',
+          entryTime: latestRecord?.entryTime || null,
+          leaveTime: latestRecord?.leaveTime || null,
+          timestamp: latestRecord?.date || null,
+          messageStatus: student.lastMessage?.[0]?.status || null
+        };
+      })
+      // Only show students who actually scanned today (entered, present, left) - never absent in scanned table
+      .filter(r => ['entered', 'present', 'left'].includes(r.status));
 
     const sortedRecords = processedRecords.sort((a, b) => {
       const timeA = a.timestamp || new Date(0);
@@ -570,11 +571,19 @@ export const getRecentAttendance = async (req, res) => {
       return new Date(timeB) - new Date(timeA);
     });
 
+    const totalActiveStudents = await Student.countDocuments({ status: 'active' });
+    const inClassCount = sortedRecords.filter(r => r.status === 'entered' || r.status === 'present').length;
+    const leftClassCount = sortedRecords.filter(r => r.status === 'left').length;
+    const totalScannedToday = inClassCount + leftClassCount;
+    const absentTodayCount = Math.max(0, totalActiveStudents - totalScannedToday);
+
     const stats = {
-      totalCount: processedRecords.length,
-      presentCount: processedRecords.filter(r => r.status === 'entered' || r.status === 'present').length,
-      absentCount: processedRecords.filter(r => r.status === 'absent').length,
-      leftCount: processedRecords.filter(r => r.status === 'left').length
+      totalCount: totalActiveStudents,
+      totalStudents: totalActiveStudents,
+      totalScanned: totalScannedToday,
+      presentCount: inClassCount,     // In Class
+      leftCount: leftClassCount,       // Left Class
+      absentCount: absentTodayCount    // Absent (not checked in today)
     };
 
     res.status(200).json({
@@ -584,11 +593,10 @@ export const getRecentAttendance = async (req, res) => {
       stats,
       timestamp: now.toJSDate()
     });
-  } catch (error) {
+  } catch {
     res.status(500).json({
       status: 'error',
-      message: 'Failed to retrieve recent attendance records',
-      error: error.message
+      message: 'Failed to retrieve recent attendance records'
     });
   }
 };

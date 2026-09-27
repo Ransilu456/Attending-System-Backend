@@ -1,7 +1,11 @@
-import express from 'express';
+﻿import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { protect, isAdmin } from '../middleware/authMiddleware.js';
-import { validateAdminInput, validateStudentInput, validateStudentUpdateInput } from '../middleware/validationMiddleware.js';
+import {
+  validateAdminInput, validateStudentInput, validateStudentUpdateInput,
+  validateLoginInput, validatePasswordUpdate, validateForgotPassword,
+  validateResetPassword, validateMongoId
+} from '../middleware/validationMiddleware.js';
 import {
   registerAdmin,
   loginAdmin,
@@ -53,11 +57,11 @@ const studentLimiter = rateLimit({
 
 // Admin authentication & account recovery routes
 router.post('/register', validateAdminInput, registerAdmin);
-router.post('/login', loginLimiter, loginAdmin);
+router.post('/login', loginLimiter, validateLoginInput, loginAdmin);
 router.post('/logout', logoutAdmin);
-router.post('/forgot-password', forgotPassword);
-router.post('/reset-password/:token', resetPassword);
-router.post('/update-password', protect, updatePassword);
+router.post('/forgot-password', validateForgotPassword, forgotPassword);
+router.post('/reset-password/:token', validateResetPassword, resetPassword);
+router.post('/update-password', protect, validatePasswordUpdate, updatePassword);
 router.patch('/profile', protect, updateProfile);
 router.get('/me', protect, getAdminDetails);
 
@@ -65,12 +69,12 @@ router.get('/me', protect, getAdminDetails);
 router.get('/students', protect, isAdmin, getStudents);
 router.get('/students/all', protect, isAdmin, getAllStudents);
 router.post('/students', protect, isAdmin, studentLimiter, validateStudentInput, registerStudent);
-router.put('/students/:id', protect, isAdmin, validateStudentInput, updateStudent);
-router.patch('/students/:id', protect, isAdmin, validateStudentUpdateInput, updateStudent);
-router.delete('/students/:id', protect, isAdmin, deleteStudent);
+router.put('/students/:id', protect, isAdmin, ...validateMongoId('id'), validateStudentInput, updateStudent);
+router.patch('/students/:id', protect, isAdmin, ...validateMongoId('id'), validateStudentUpdateInput, updateStudent);
+router.delete('/students/:id', protect, isAdmin, ...validateMongoId('id'), deleteStudent);
 
 // Student QR code generation routes (admin protected)
-router.get('/students/:id/qr-code', protect, isAdmin, generateStudentQRCode);
+router.get('/students/:id/qr-code', protect, isAdmin, ...validateMongoId('id'), generateStudentQRCode);
 router.get('/students/qr-code/:indexNumber', protect, isAdmin, getStudentQRByIndex);
 
 // Attendance overview route (admin protected)

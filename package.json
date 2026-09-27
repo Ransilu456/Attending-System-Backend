@@ -1,6 +1,6 @@
 {
   "name": "qr-attending-system-v8",
-  "version": "8.1.0",
+  "version": "8.2.0",
   "main": "server.js",
   "type": "module",
   "scripts": {

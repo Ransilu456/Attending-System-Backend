@@ -1,6 +1,8 @@
-import express from 'express';
+﻿import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { validateStudentUpdateInput } from '../middleware/validationMiddleware.js';
+import {
+  validateStudentUpdateInput, validateStudentLoginInput, validateMongoId, validateDateRange
+} from '../middleware/validationMiddleware.js';
 import { protect, isAdmin, verifyStudent } from '../middleware/authMiddleware.js';
 import {
   downloadQRCode,
@@ -44,10 +46,9 @@ const loginLimiter = rateLimit({
 });
 
 // Admin-managed student profile & statistics routes
-router.get('/profile/:studentId', protect, isAdmin, getStudentProfile);
-router.patch('/profile/:studentId', protect, isAdmin, validateStudentUpdateInput, updateStudentProfile);
-router.get('/attendance-history/:studentId', protect, isAdmin, getAttendanceHistory);
-router.get('/attendance-history', protect, isAdmin, getAttendanceHistory);
+router.get('/profile/:studentId', protect, isAdmin, ...validateMongoId('studentId'), getStudentProfile);
+router.patch('/profile/:studentId', protect, isAdmin, ...validateMongoId('studentId'), validateStudentUpdateInput, updateStudentProfile);
+router.get('/attendance-history/:studentId', protect, isAdmin, ...validateMongoId('studentId'), validateDateRange, getAttendanceHistory);
 router.get('/dashboard-stats', protect, isAdmin, getDashboardStats);
 
 // Public student QR lookup & download endpoints
@@ -55,11 +56,11 @@ router.get('/download-qr-code', qrLimiter, downloadQRCode);
 router.get('/search-qr', qrLimiter, searchQRCode);
 
 // Student authentication route
-router.post('/login', loginLimiter, studentLogin);
+router.post('/login', loginLimiter, validateStudentLoginInput, studentLogin);
 
 // Student authenticated self-service routes
 router.get('/me', verifyStudent, getMyProfile);
 router.patch('/me', verifyStudent, validateStudentUpdateInput, updateMyProfile);
-router.get('/me/attendance', verifyStudent, getMyAttendance);
+router.get('/me/attendance', verifyStudent, validateDateRange, getMyAttendance);
 
 export default router;

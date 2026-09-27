@@ -1,6 +1,8 @@
 import Student from '../models/student.model.js';
 import { DateTime } from 'luxon';
 import mongoose from 'mongoose';
+import { maskId, resolveId } from '../utils/idMask.js';
+import { getSystemSessionDates, calculateStudentAttendanceStats, invalidateSessionDatesCache } from '../utils/attendanceStats.js';
 
 // In-memory configuration store for automatic checkout task
 let autoCheckoutSettings = {
@@ -161,7 +163,7 @@ export const getScannedStudentsToday = async (req, res) => {
         : null;
 
       return {
-        _id: student._id,
+        _id: maskId(student._id),
         name: student.name,
         indexNumber: student.indexNumber,
         student_email: student.student_email,
@@ -174,9 +176,11 @@ export const getScannedStudentsToday = async (req, res) => {
       };
     });
 
+    const scannedTodayStudents = processedStudents.filter(s => ['entered', 'present', 'left'].includes(s.status));
+
     const totalStudents = await Student.countDocuments({ status: 'active' });
-    const presentCount = processedStudents.filter(s => s.status === 'present' || s.status === 'entered').length;
-    const leftCount = processedStudents.filter(s => s.status === 'left').length;
+    const presentCount = scannedTodayStudents.filter(s => s.status === 'present' || s.status === 'entered').length;
+    const leftCount = scannedTodayStudents.filter(s => s.status === 'left').length;
     const absentCount = Math.max(0, totalStudents - presentCount - leftCount);
 
     const stats = {
@@ -190,7 +194,7 @@ export const getScannedStudentsToday = async (req, res) => {
     res.status(200).json({
       success: true,
       data: {
-        students: processedStudents,
+        students: scannedTodayStudents,
         stats
       }
     });
@@ -257,7 +261,7 @@ export const getAttendanceByDate = async (req, res) => {
         : null;
 
       return {
-        _id: student._id,
+        _id: maskId(student._id),
         name: student.name,
         indexNumber: student.indexNumber,
         student_email: student.student_email,
@@ -269,9 +273,10 @@ export const getAttendanceByDate = async (req, res) => {
       };
     });
 
+    const scannedForDate = processedStudents.filter(s => ['entered', 'present', 'left'].includes(s.status));
     const totalStudents = await Student.countDocuments({ status: 'active' });
-    const presentCount = processedStudents.filter(s => s.status === 'present' || s.status === 'entered').length;
-    const leftCount = processedStudents.filter(s => s.status === 'left').length;
+    const presentCount = scannedForDate.filter(s => s.status === 'present' || s.status === 'entered').length;
+    const leftCount = scannedForDate.filter(s => s.status === 'left').length;
     const absentCount = Math.max(0, totalStudents - presentCount - leftCount);
 
     const stats = {
@@ -285,7 +290,7 @@ export const getAttendanceByDate = async (req, res) => {
     res.status(200).json({
       success: true,
       data: {
-        students: processedStudents,
+        students: scannedForDate,
         stats
       }
     });
@@ -306,110 +311,65 @@ export const getStudentAttendanceHistory = async (req, res) => {
       limit = 10, 
       offset = 0, 
       startDate,
-      endDate 
+      endDate,
+      sortOrder = 'desc'
     } = req.query;
     
-    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+    const resolvedId = resolveId(studentId || req.params.studentId);
+    if (!resolvedId || !mongoose.Types.ObjectId.isValid(resolvedId)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid student ID format'
       });
     }
 
-    const limitVal = parseInt(limit, 10);
-    const offsetVal = parseInt(offset, 10);
-
-    const [result] = await Student.aggregate([
-      { $match: { _id: new mongoose.Types.ObjectId(studentId) } },
-      {
-        $project: {
-          name: 1,
-          indexNumber: 1,
-          student_email: 1,
-          attendancePercentage: 1,
-          filteredHistory: {
-            $filter: {
-              input: '$attendanceHistory',
-              as: 'record',
-              cond: {
-                $and: [
-                  startDate ? { $gte: ['$$record.date', new Date(startDate)] } : true,
-                  endDate ? { $lte: ['$$record.date', new Date(new Date(endDate).setHours(23, 59, 59, 999))] } : true
-                ]
-              }
-            }
-          }
-        }
-      },
-      {
-        $project: {
-          name: 1,
-          indexNumber: 1,
-          student_email: 1,
-          attendancePercentage: 1,
-          totalRecords: { $size: '$filteredHistory' },
-          stats: {
-            presentCount: {
-              $size: {
-                $filter: {
-                  input: '$filteredHistory',
-                  as: 'r',
-                  cond: { $in: ['$$r.status', ['present', 'entered']] }
-                }
-              }
-            },
-            absentCount: {
-              $size: {
-                $filter: {
-                  input: '$filteredHistory',
-                  as: 'r',
-                  cond: { $eq: ['$$r.status', 'absent'] }
-                }
-              }
-            },
-            leftCount: {
-              $size: {
-                $filter: {
-                  input: '$filteredHistory',
-                  as: 'r',
-                  cond: { $eq: ['$$r.status', 'left'] }
-                }
-              }
-            }
-          },
-          paginatedHistory: {
-            $slice: [
-              { $reverseArray: '$filteredHistory' },
-              offsetVal,
-              limitVal
-            ]
-          }
-        }
-      }
-    ]);
-
-    if (!result) {
+    const student = await Student.findById(resolvedId).lean();
+    if (!student) {
       return res.status(404).json({
         success: false,
         message: 'Student not found'
       });
     }
 
+    const allSessionDates = await getSystemSessionDates();
+    const stats = calculateStudentAttendanceStats(student, allSessionDates, startDate, endDate);
+
+    let history = [...(student.attendanceHistory || [])];
+    if (startDate) {
+      const sDate = new Date(startDate);
+      history = history.filter(r => new Date(r.date) >= sDate);
+    }
+    if (endDate) {
+      const eDate = new Date(endDate);
+      eDate.setHours(23, 59, 59, 999);
+      history = history.filter(r => new Date(r.date) <= eDate);
+    }
+
+    history.sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+    });
+
+    const totalRecords = history.length;
+    const limitVal = parseInt(limit, 10);
+    const offsetVal = parseInt(offset, 10);
+    const paginatedHistory = history.slice(offsetVal, offsetVal + limitVal);
+
     return res.status(200).json({
       success: true,
       data: {
         student: {
-          _id: result._id,
-          name: result.name,
-          indexNumber: result.indexNumber,
-          student_email: result.student_email
+          _id: maskId(student._id),
+          name: student.name,
+          indexNumber: student.indexNumber,
+          student_email: student.student_email
         },
-        attendanceHistory: result.paginatedHistory,
-        totalRecords: result.totalRecords,
+        attendanceHistory: paginatedHistory,
+        totalRecords,
         stats: {
-          ...result.stats,
-          totalCount: result.totalRecords,
-          attendancePercentage: result.attendancePercentage || 0
+          ...stats,
+          totalCount: totalRecords
         }
       }
     });
@@ -425,8 +385,8 @@ export const getStudentAttendanceHistory = async (req, res) => {
 // Clear all recorded attendance entries for a student
 export const clearStudentAttendanceHistory = async (req, res) => {
   try {
-    const { studentId } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+    const studentId = resolveId(req.params.studentId);
+    if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
       return res.status(400).json({ success: false, message: 'Invalid student ID' });
     }
 
@@ -445,6 +405,7 @@ export const clearStudentAttendanceHistory = async (req, res) => {
     student.lastAttendance = null;
     
     await student.save();
+    invalidateSessionDatesCache();
 
     return res.json({
       success: true,
@@ -461,9 +422,10 @@ export const clearStudentAttendanceHistory = async (req, res) => {
 // Remove a single attendance entry by record ID
 export const deleteAttendanceRecord = async (req, res) => {
   try {
-    const { studentId, recordId } = req.params;
+    const studentId = resolveId(req.params.studentId);
+    const recordId = resolveId(req.params.recordId);
 
-    if (!mongoose.Types.ObjectId.isValid(studentId) || !mongoose.Types.ObjectId.isValid(recordId)) {
+    if (!studentId || !recordId || !mongoose.Types.ObjectId.isValid(studentId) || !mongoose.Types.ObjectId.isValid(recordId)) {
       return res.status(400).json({ success: false, message: 'Invalid ID format' });
     }
 

@@ -2,16 +2,23 @@ import Student from '../models/student.model.js';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import { maskId, resolveId } from '../utils/idMask.js';
+import { getSystemSessionDates, calculateStudentAttendanceStats } from '../utils/attendanceStats.js';
 dotenv.config();
+
+function safeError(err) {
+  return process.env.NODE_ENV === 'development' ? err.message : 'An error occurred';
+}
 
 // Download student QR code PNG image file attachment
 export const downloadQRCode = async (req, res) => {
   try {
     const { indexNumber, name, studentId } = req.query;
     let student;
+    const resolvedStudentId = resolveId(studentId);
     
-    if (studentId && mongoose.Types.ObjectId.isValid(studentId)) {
-      student = await Student.findById(studentId);
+    if (resolvedStudentId && mongoose.Types.ObjectId.isValid(resolvedStudentId)) {
+      student = await Student.findById(resolvedStudentId);
     } else if (indexNumber && name) {
       student = await Student.findOne({ 
         indexNumber: String(indexNumber).trim().toUpperCase(), 
@@ -72,47 +79,50 @@ export const searchQRCode = async (req, res) => {
 // Fetch student profile details by ID
 export const getStudentProfile = async (req, res) => {
   try {
-    const studentId = req.params.studentId || req.query.studentId;
-    
+    const studentId = resolveId(req.params.studentId || req.query.studentId);
+
     if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
-      return res.status(400).json({ 
-        message: 'Valid student ID is required.' 
-      });
+      return res.status(400).json({ message: 'Valid student ID is required.' });
     }
-    
-    const student = await Student.findById(studentId).select('-qrCode');
-    
+
+    const student = await Student.findById(studentId)
+      .select('-qrCode -qrToken -messages')
+      .lean();
+
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
     }
 
     res.status(200).json({
       message: 'Student profile retrieved successfully',
-      student
+      student: { ...student, _id: maskId(student._id), id: maskId(student._id) }
     });
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching student profile', error: error.message });
+  } catch {
+    res.status(500).json({ message: 'Error fetching student profile' });
   }
 };
 
 // Update student profile details (admin access)
 export const updateStudentProfile = async (req, res) => {
   try {
-    const studentId = req.params.studentId || req.query.studentId;
-    
+    const studentId = resolveId(req.params.studentId || req.query.studentId);
+
     if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
-      return res.status(400).json({ 
-        message: 'Valid student ID is required.' 
-      });
+      return res.status(400).json({ message: 'Valid student ID is required.' });
     }
-    
-    const updates = req.body;
+
+    // Whitelist only safe updatable fields
+    const ALLOWED = ['name', 'address', 'student_email', 'parent_email', 'parent_telephone', 'dateOfBirth', 'profileImage', 'status'];
+    const updates = {};
+    for (const field of ALLOWED) {
+      if (req.body[field] !== undefined) updates[field] = req.body[field];
+    }
 
     const student = await Student.findByIdAndUpdate(
       studentId,
       { $set: updates },
       { new: true, runValidators: true }
-    ).select('-qrCode');
+    ).select('-qrCode -qrToken -messages');
 
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
@@ -120,52 +130,54 @@ export const updateStudentProfile = async (req, res) => {
 
     res.status(200).json({
       message: 'Student profile updated successfully',
-      student
+      student: { ...student.toObject(), _id: maskId(student._id), id: maskId(student._id) }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error updating student profile', error: error.message });
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(e => e.message);
+      return res.status(400).json({ message: messages.join(', ') });
+    }
+    res.status(500).json({ message: 'Error updating student profile' });
   }
 };
 
 // Retrieve student attendance history filtered by date
 export const getAttendanceHistory = async (req, res) => {
   try {
-    const studentId = req.params.studentId || req.query.studentId;
-    
+    const studentId = resolveId(req.params.studentId || req.query.studentId);
+
     if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
-      return res.status(400).json({ 
-        message: 'Valid student ID is required.' 
-      });
+      return res.status(400).json({ message: 'Valid student ID is required.' });
     }
-    
+
     const { startDate, endDate } = req.query;
 
-    const query = { _id: studentId };
-    if (startDate && endDate) {
-      query['attendanceHistory.date'] = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      };
-    }
-
-    const student = await Student.findOne(query)
-      .select('name indexNumber attendanceHistory')
-      .sort({ 'attendanceHistory.date': -1 });
+    const student = await Student.findById(studentId)
+      .select('name indexNumber attendanceHistory');
 
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
     }
+
+    let history = [...student.attendanceHistory];
+    if (startDate) history = history.filter(r => new Date(r.date) >= new Date(startDate));
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      history = history.filter(r => new Date(r.date) <= end);
+    }
+    history.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     res.status(200).json({
       message: 'Attendance history retrieved successfully',
       student: {
         name: student.name,
         indexNumber: student.indexNumber,
-        attendanceHistory: student.attendanceHistory
+        attendanceHistory: history
       }
     });
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching attendance history', error: error.message });
+  } catch {
+    res.status(500).json({ message: 'Error fetching attendance history' });
   }
 };
 
@@ -266,10 +278,6 @@ export const studentLogin = async (req, res) => {
   try {
     const { student_email, indexNumber } = req.body;
 
-    if (!student_email || !indexNumber) {
-      return res.status(400).json({ message: 'Email and index number are required.' });
-    }
-
     const student = await Student.findOne({
       student_email: String(student_email).toLowerCase().trim(),
       indexNumber: String(indexNumber).toUpperCase().trim()
@@ -304,7 +312,8 @@ export const studentLogin = async (req, res) => {
       message: 'Login successful',
       token,
       student: {
-        _id: student._id,
+        id: maskId(student._id),
+        _id: maskId(student._id),
         name: student.name,
         indexNumber: student.indexNumber,
         student_email: student.student_email,
@@ -316,24 +325,27 @@ export const studentLogin = async (req, res) => {
         profileImage: student.profileImage,
       }
     });
-  } catch (error) {
-    res.status(500).json({ message: 'Error during login', error: error.message });
+  } catch {
+    res.status(500).json({ message: 'Login failed. Please try again.' });
   }
 };
 
 // Retrieve authenticated student's own profile
 export const getMyProfile = async (req, res) => {
   try {
-    const student = await Student.findById(req.student._id).select('-qrCode');
+    const student = await Student.findById(req.student._id)
+      .select('-qrCode -qrToken -messages')
+      .lean();
+
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
     }
     res.status(200).json({
       message: 'Profile retrieved successfully',
-      student
+      student: { ...student, _id: maskId(student._id), id: maskId(student._id) }
     });
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching student profile', error: error.message });
+  } catch {
+    res.status(500).json({ message: 'Error fetching student profile' });
   }
 };
 
@@ -372,7 +384,7 @@ export const updateMyProfile = async (req, res) => {
 
     res.status(200).json({
       message: 'Profile updated successfully',
-      student,
+      student: { ...student.toObject(), _id: maskId(student._id), id: maskId(student._id) },
     });
   } catch (error) {
     if (error.name === 'ValidationError') {
@@ -389,13 +401,16 @@ export const getMyAttendance = async (req, res) => {
     const { startDate, endDate } = req.query;
 
     const student = await Student.findById(req.student._id)
-      .select('name indexNumber attendanceHistory attendancePercentage attendanceCount lastAttendance status');
+      .select('name indexNumber attendanceHistory attendancePercentage attendanceCount lastAttendance status createdAt');
 
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
     }
 
-    let history = [...student.attendanceHistory];
+    const allSessionDates = await getSystemSessionDates();
+    const stats = calculateStudentAttendanceStats(student, allSessionDates, startDate, endDate);
+
+    let history = [...(student.attendanceHistory || [])];
 
     if (startDate) {
       const start = new Date(startDate);
@@ -409,19 +424,6 @@ export const getMyAttendance = async (req, res) => {
 
     history.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    const stats = {
-      totalCount: student.attendanceHistory.length,
-      presentCount: student.attendanceHistory.filter(r => r.status === 'present' || r.status === 'entered').length,
-      absentCount: student.attendanceHistory.filter(r => r.status === 'absent').length,
-      leftCount: student.attendanceHistory.filter(r => r.status === 'left').length,
-      attendancePercentage: 0,
-    };
-
-    const effectivePresent = stats.presentCount + stats.leftCount;
-    stats.attendancePercentage = stats.totalCount > 0
-      ? (effectivePresent / stats.totalCount) * 100
-      : 0;
-
     res.status(200).json({
       message: 'Attendance retrieved successfully',
       student: {
@@ -431,7 +433,10 @@ export const getMyAttendance = async (req, res) => {
         status: student.status,
       },
       attendanceHistory: history,
-      stats
+      stats: {
+        ...stats,
+        totalCount: history.length,
+      }
     });
   } catch (error) {
     res.status(500).json({ message: 'Error fetching attendance', error: error.message });

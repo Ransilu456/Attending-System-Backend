@@ -1,5 +1,6 @@
-import express from 'express';
+﻿import express from 'express';
 import { protect, isAdmin } from '../middleware/authMiddleware.js';
+import { validateMongoId, validateDateRange } from '../middleware/validationMiddleware.js';
 import {
   configureAutoCheckout,
   getAutoCheckoutSettings,
@@ -24,8 +25,8 @@ router.get('/date/:date', protect, isAdmin, getAttendanceByDate);
 router.get('/:date', protect, isAdmin, getAttendanceByDate);
 
 // Student attendance management & cleanup routes (admin protected)
-router.get('/student/:studentId/history', protect, isAdmin, getStudentAttendanceHistory);
-router.delete('/student/:studentId/clear', protect, isAdmin, clearStudentAttendanceHistory);
-router.delete('/student/:studentId/record/:recordId', protect, isAdmin, deleteAttendanceRecord);
+router.get('/student/:studentId/history', protect, isAdmin, ...validateMongoId('studentId'), validateDateRange, getStudentAttendanceHistory);
+router.delete('/student/:studentId/clear', protect, isAdmin, ...validateMongoId('studentId'), clearStudentAttendanceHistory);
+router.delete('/student/:studentId/record/:recordId', protect, isAdmin, ...validateMongoId('studentId'), ...validateMongoId('recordId'), deleteAttendanceRecord);
 
 export default router;

@@ -9,10 +9,10 @@ import studentRoutes from './routes/students.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import qrScannerRoutes from './routes/qrScanner.routes.js';
 import attendanceRoutes from './routes/attendance.routes.js';
-import notificationRoutes from './routes/notifications.routes.js';
 
 import { startScheduler } from './services/schedulerService.js';
 import { errorHandler } from './middleware/authMiddleware.js';
+import { generateCsrfToken, validateCsrf } from './middleware/csrfMiddleware.js';
 import { printBanner, logInfo, logSuccess, logWarning, logError, logSection, logServerStart, stopSpinner, succeedSpinner } from './utils/terminal.js';
 import { connectDB, closeDB } from './config/database.js';
 
@@ -48,6 +48,8 @@ app.use(cors({
   allowedHeaders: [
     'Content-Type',
     'Authorization',
+    'x-csrf-token',
+    'x-session-id',
     'mongodb-date-format',
     'preserve-mongodb-format',
     'time-format',
@@ -93,12 +95,14 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-// Request and response logger
+// Request and response logger (no user input or path params logged)
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
-    const logMessage = `${req.method} ${req.originalUrl || req.url} ${res.statusCode} (${duration}ms)`;
+    // Log only method + base path (strip query strings and path params)
+    const basePath = req.route?.path || req.path.replace(/\/[a-f0-9]{24}/gi, '/:id').replace(/\/[^/]+$/, '/*');
+    const logMessage = `${req.method} ${basePath} ${res.statusCode} (${duration}ms)`;
     if (res.statusCode >= 500) {
       logError(logMessage);
     } else if (res.statusCode >= 400) {
@@ -110,46 +114,54 @@ app.use((req, res, next) => {
   next();
 });
 
+// CSRF token issuance endpoint (unauthenticated, GET)
+app.get('/api/csrf-token', generateCsrfToken);
+
+// Apply CSRF validation to all state-changing API routes
+app.use('/api/', validateCsrf);
+
 // API route registrations
 app.use('/api/students', studentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/qr', qrScannerRoutes);
 app.use('/api/attendance', attendanceRoutes);
-app.use('/api/notifications', notificationRoutes);
 app.use('/api/public', express.static('public'));
 
 // Server health check endpoint
 app.get('/api/health', (req, res) => {
   const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
-
   res.status(200).json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     services: {
-      database: {
-        status: dbStatus,
-        connection: mongoose.connection.host || 'unknown'
-      },
+      database: { status: dbStatus, connection: mongoose.connection.host || 'unknown' }
     },
     environment: process.env.NODE_ENV || 'development',
     version: '8.1.0'
   });
 });
 
+// Lightweight readiness check — returns 503 until DB is connected
+app.get('/api/ready', (req, res) => {
+  if (mongoose.connection.readyState === 1) {
+    return res.status(200).json({ ready: true });
+  }
+  res.status(503).json({ ready: false, message: 'Database connecting…' });
+});
+
 // 404 Route handler for undefined endpoints
 app.use((req, res) => {
-  logWarning(`Route not found: ${req.method} ${req.url}`);
+  logWarning(`Route not found: ${req.method} [path redacted]`);
   res.status(404).json({
     success: false,
-    message: 'Route not found',
-    path: req.url
+    message: 'Route not found'
   });
 });
 
 // Centralized error handling middleware
 app.use(errorHandler);
 
-// Server startup and initialization sequence
+// Server startup: listen immediately, connect DB in background for fast local startup
 const startServer = async () => {
   let server;
   try {
@@ -163,22 +175,18 @@ const startServer = async () => {
     logSection('Configuration');
     logInfo(`Environment: ${process.env.NODE_ENV || 'development'}`);
     logInfo(`Port: ${port}`);
-    logInfo(`CORS Origins: ${allowedOrigins.join(', ')}`);
 
-    logSection('Database');
-    await connectDB();
-    succeedSpinner('db', 'Connected to MongoDB successfully');
-
-    logSection('API Routes');
-    logInfo('GET  /api/health - Health check endpoint');
-    logInfo('POST /api/qr/markAttendanceQR - QR code attendance marking');
-    logInfo('GET  /api/students/download-qr-code - Download student QR code');
-
+    // Bind port first — server accepts connections immediately
     server = app.listen(port, '0.0.0.0', () => {
-      stopSpinner('server');
       logServerStart(port);
       logSuccess(`Server is running in ${process.env.NODE_ENV || 'development'} mode`);
     });
+
+    // Connect to DB in background so startup is instant locally
+    logSection('Database');
+    connectDB()
+      .then(() => succeedSpinner('db', 'Connected to MongoDB successfully'))
+      .catch(err => logError(`DB connection failed: ${err.message}`));
 
     startScheduler();
 

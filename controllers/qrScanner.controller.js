@@ -2,11 +2,12 @@ import Student from '../models/student.model.js';
 import { numericCodeToMongoId } from '../utils/idConverter.js';
 import mongoose from 'mongoose';
 import { sendAttendanceNotificationLink } from '../controllers/messaging.controller.js';
+import { maskId, resolveId } from '../utils/idMask.js';
 
 // Retrieve student QR code string or image by student ID
 export const getStudentQRCode = async (req, res) => {
   try {
-    const { studentId } = req.params;
+    const studentId = resolveId(req.params.studentId);
 
     if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
       return res.status(400).json({
@@ -51,7 +52,7 @@ export const getStudentQRCode = async (req, res) => {
 // Store generated QR code string to a student document
 export const saveQRCode = async (req, res) => {
   try {
-    const { studentId } = req.params;
+    const studentId = resolveId(req.params.studentId);
     const { qrData } = req.body;
 
     if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
@@ -89,7 +90,8 @@ export const saveQRCode = async (req, res) => {
       success: true,
       message: 'QR code data saved successfully',
       data: {
-        _id: student._id,
+        _id: maskId(student._id),
+        id: maskId(student._id),
         name: student.name,
         indexNumber: student.indexNumber,
         qrCodeUpdated: true
@@ -166,6 +168,16 @@ export const markAttendanceQR = async (req, res) => {
       student = await Student.findOne({ indexNumber: code.toUpperCase() })
         .select('name indexNumber student_email parent_email parent_telephone address age status attendanceHistory messages lastAttendance attendancePercentage attendanceCount')
         .lean();
+    }
+
+    // Fallback lookup if code is a masked ID token
+    if (!student) {
+      const resolvedCodeId = resolveId(code);
+      if (resolvedCodeId && mongoose.Types.ObjectId.isValid(resolvedCodeId)) {
+        student = await Student.findById(resolvedCodeId)
+          .select('name indexNumber student_email parent_email parent_telephone address age status attendanceHistory messages lastAttendance attendancePercentage attendanceCount')
+          .lean();
+      }
     }
 
     if (!student) {
@@ -271,7 +283,8 @@ export const markAttendanceQR = async (req, res) => {
       message: `Student verified and attendance marked successfully: ${student.name} has ${status}`,
       data: {
         student: {
-          _id: student._id,
+          _id: maskId(student._id),
+          id: maskId(student._id),
           name: student.name,
           indexNumber: student.indexNumber,
           student_email: student.student_email,
