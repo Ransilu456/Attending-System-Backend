@@ -183,11 +183,42 @@ export const getScannedStudentsToday = async (req, res) => {
     const leftCount = scannedTodayStudents.filter(s => s.status === 'left').length;
     const absentCount = Math.max(0, totalStudents - presentCount - leftCount);
 
+    // Overall institutional metrics & monthly trends
+    const totalEnrolled = await Student.countDocuments();
+    const participatingStudents = await Student.countDocuments({ attendanceCount: { $gt: 0 } });
+    const overallRate = totalEnrolled > 0 ? Math.round((participatingStudents / totalEnrolled) * 100) : 0;
+
+    const monthlyTrends = await Student.aggregate([
+      { $unwind: '$attendanceHistory' },
+      {
+        $group: {
+          _id: {
+            year: { $year: '$attendanceHistory.date' },
+            month: { $month: '$attendanceHistory.date' }
+          },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { '_id.year': 1, '_id.month': 1 } }
+    ]);
+
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const formattedMonthly = monthlyTrends.slice(-12).map(m => ({
+      label: monthNames[(m._id.month - 1) % 12],
+      year: m._id.year,
+      month: m._id.month,
+      count: m.count
+    }));
+
     const stats = {
       totalCount: totalStudents,
+      totalEnrolled,
+      participatingStudents,
+      overallRate,
       presentCount,
       leftCount,
       absentCount,
+      monthlyTrends: formattedMonthly,
       timestamp: now.toJSDate()
     };
 

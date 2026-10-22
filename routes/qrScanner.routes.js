@@ -13,7 +13,8 @@ const scanLimiter = rateLimit({
   message: { status: 'fail', message: 'Too many QR scan attempts. Please slow down.' }
 });
 
-// QR attendance processing route 
+// QR attendance processing route
+router.post('/attendance', protect, scanLimiter, markAttendanceQR);
 router.post('/markAttendanceQR', protect, scanLimiter, markAttendanceQR);
 
 // QR data retrieval and storage routes 

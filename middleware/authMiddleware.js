@@ -1,7 +1,16 @@
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import Admin from '../models/admin.model.js';
 import Student from '../models/student.model.js';
 import AppError from '../utils/appError.js';
+import { isMongoUnavailable } from '../utils/dbAvailability.js';
+import { getFirebaseAdmin } from '../config/firebase.js';
+import StudentSession from '../models/studentSession.model.js';
+import {
+  clearStudentSessionCookie,
+  hashStudentSessionToken,
+  readStudentSessionToken,
+} from '../utils/studentSession.js';
 
 // Verify admin JWT authentication token and account status
 export const protect = async (req, res, next) => {
@@ -20,6 +29,9 @@ export const protect = async (req, res, next) => {
     }
  
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (mongoose.connection.readyState !== 1) {
+      return next(new AppError('MongoDB is unavailable. Please retry when the teacher server is online.', 503));
+    }
 
     const admin = await Admin.findById(decoded.id);
     if (!admin) {
@@ -40,7 +52,10 @@ export const protect = async (req, res, next) => {
 
     req.admin = admin;
     next();
-  } catch {
+  } catch (error) {
+    if (isMongoUnavailable(error)) {
+      return next(new AppError('MongoDB is unavailable. Please retry when the teacher server is online.', 503));
+    }
     next(new AppError('Invalid or expired token. Please log in again.', 401));
   }
 };
@@ -58,34 +73,93 @@ export const restrictTo = (...roles) => {
 // Verify student JWT authentication token and active status
 export const verifyStudent = async (req, res, next) => {
   try {
-    let token;
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-      token = req.headers.authorization.split(' ')[1];
-    }
-
-    if (!token) {
+    const sessionToken = readStudentSessionToken(req);
+    if (!sessionToken) {
       return next(new AppError('You are not logged in. Please log in to get access.', 401));
     }
 
-    if (!process.env.JWT_SECRET) {
-      return next(new AppError('Server authentication configuration error.', 500));
+    const session = await StudentSession.findOne({
+      tokenHash: hashStudentSessionToken(sessionToken),
+      revokedAt: null,
+      expiresAt: { $gt: new Date() },
+    }).select('studentId');
+    if (!session) {
+      clearStudentSessionCookie(res);
+      return next(new AppError('Your student session has expired. Please sign in again.', 401));
     }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const student = await Student.findById(decoded.id);
+    const student = await Student.findById(session.studentId);
 
     if (!student) {
-      return next(new AppError('The student belonging to this token no longer exists.', 401));
+      clearStudentSessionCookie(res);
+      return next(new AppError('The student belonging to this session no longer exists.', 401));
     }
 
     if (student.status !== 'active') {
+      clearStudentSessionCookie(res);
       return next(new AppError('Your account is not active. Please contact support.', 401));
     }
 
     req.student = student;
     next();
-  } catch {
+  } catch (error) {
+    if (isMongoUnavailable(error)) {
+      return next(new AppError('MongoDB is unavailable. Please retry when the teacher server is online.', 503));
+    }
+    clearStudentSessionCookie(res);
     next(new AppError('Invalid or expired token. Please log in again.', 401));
+  }
+};
+
+export const verifyFirebaseStudentToken = async (req, res, next) => {
+  const sessionToken = readStudentSessionToken(req);
+  if (sessionToken) {
+    try {
+      const session = await StudentSession.findOne({
+        tokenHash: hashStudentSessionToken(sessionToken),
+        revokedAt: null,
+        expiresAt: { $gt: new Date() },
+      }).select('studentId');
+      if (!session) {
+        clearStudentSessionCookie(res);
+        return next(new AppError('Your student session has expired. Please sign in again.', 401));
+      }
+      const student = await Student.findById(session.studentId).select('_id status');
+      if (!student || student.status !== 'active') {
+        clearStudentSessionCookie(res);
+        return next(new AppError('Your student account is not active. Please contact support.', 401));
+      }
+      req.firebaseStudent = { uid: String(session.studentId), role: 'student' };
+      return next();
+    } catch (error) {
+      if (isMongoUnavailable(error)) {
+        return next(new AppError('MongoDB is unavailable. Please retry when the teacher server is online.', 503));
+      }
+      clearStudentSessionCookie(res);
+      return next(new AppError('Invalid or expired student session.', 401));
+    }
+  }
+
+  const authorization = req.headers.authorization || '';
+  const token = authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : null;
+  if (!token) {
+      return next(new AppError('You are not logged in. Please log in to get access.', 401));
+  }
+
+  try {
+    const firebase = getFirebaseAdmin();
+    if (!firebase) {
+      return next(new AppError('Student data service is not configured. Please contact your teacher.', 503));
+    }
+    const decoded = await firebase.auth.verifyIdToken(token, true);
+    if (decoded.role !== 'student') {
+      return next(new AppError('Student access is required for this resource.', 403));
+    }
+    req.firebaseStudent = decoded;
+    return next();
+  } catch {
+    return next(new AppError('Your student sign-in has expired. Please sign in again.', 401));
   }
 };
 

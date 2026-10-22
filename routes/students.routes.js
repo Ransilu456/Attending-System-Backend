@@ -1,9 +1,11 @@
 ﻿import express from 'express';
 import rateLimit from 'express-rate-limit';
 import {
-  validateStudentUpdateInput, validateStudentLoginInput, validateMongoId, validateDateRange
+  validateStudentUpdateInput, validateMongoId, validateDateRange
 } from '../middleware/validationMiddleware.js';
-import { protect, isAdmin, verifyStudent } from '../middleware/authMiddleware.js';
+import {
+  protect, isAdmin, verifyFirebaseStudentToken, verifyStudent
+} from '../middleware/authMiddleware.js';
 import {
   downloadQRCode,
   searchQRCode,
@@ -11,10 +13,16 @@ import {
   updateStudentProfile,
   getAttendanceHistory,
   getDashboardStats,
-  studentLogin,
   getMyProfile,
   getMyAttendance,
   updateMyProfile,
+  getFirebaseFallbackProfile,
+  getFirebaseFallbackAttendance,
+  getFirebaseFallbackQRCode,
+  verifyFirebaseStudentEnrollment,
+  createStudentSession,
+  restoreStudentSession,
+  logoutStudent,
 } from '../controllers/students.controller.js';
 
 const router = express.Router();
@@ -56,11 +64,21 @@ router.get('/download-qr-code', qrLimiter, downloadQRCode);
 router.get('/search-qr', qrLimiter, searchQRCode);
 
 // Student authentication route
-router.post('/login', loginLimiter, validateStudentLoginInput, studentLogin);
+router.post('/login', loginLimiter, (req, res) => res.status(410).json({
+  success: false,
+  message: 'Student sign-in now requires Firebase email and password authentication.',
+}));
+router.post('/session', loginLimiter, createStudentSession);
+router.get('/session', verifyStudent, restoreStudentSession);
+router.post('/logout', logoutStudent);
 
 // Student authenticated self-service routes
 router.get('/me', verifyStudent, getMyProfile);
 router.patch('/me', verifyStudent, validateStudentUpdateInput, updateMyProfile);
 router.get('/me/attendance', verifyStudent, validateDateRange, getMyAttendance);
+router.get('/me/firebase', verifyFirebaseStudentToken, getFirebaseFallbackProfile);
+router.get('/me/firebase/attendance', verifyFirebaseStudentToken, validateDateRange, getFirebaseFallbackAttendance);
+router.get('/me/firebase/qr', verifyFirebaseStudentToken, getFirebaseFallbackQRCode);
+router.post('/me/verify-enrollment', verifyFirebaseStudentToken, verifyFirebaseStudentEnrollment);
 
 export default router;

@@ -1,0 +1,540 @@
+{
+  "info": {
+    "_postman_id": "560bf294-b0d3-4a9f-b756-9a515909d4d9",
+    "name": "Attendance System API v1",
+    "description": "Smoke and endpoint tests for the Attendance System API. Run against a disposable or staging database. The collection-level tests fail on HTTP 5xx responses. Run Fetch CSRF token first; login requests save tokens when successful. Supply tokens and IDs in the Postman environment for protected routes. Destructive attendance and deletion operations are disabled by default.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+    "variable": [
+      { "key": "baseUrl", "value": "http://localhost:5001/api/v1" },
+      { "key": "csrfToken", "value": "" },
+      { "key": "sessionId", "value": "" },
+      { "key": "adminToken", "value": "" },
+      { "key": "studentToken", "value": "" },
+      { "key": "firebaseStudentToken", "value": "" },
+      { "key": "adminEmail", "value": "" },
+      { "key": "adminPassword", "value": "" },
+      { "key": "studentEmail", "value": "" },
+      { "key": "studentPassword", "value": "" },
+      { "key": "phoneNumber", "value": "" },
+      { "key": "studentId", "value": "replace-with-mongodb-object-id" },
+      { "key": "recordId", "value": "replace-with-attendance-record-id" },
+      { "key": "indexNumber", "value": "" },
+      { "key": "qrData", "value": "" },
+      { "key": "resetToken", "value": "replace-with-password-reset-token" },
+      { "key": "date", "value": "2026-10-21" },
+      { "key": "startDate", "value": "2026-10-01" },
+      { "key": "endDate", "value": "2026-10-21" }
+    ],
+    "event": [
+      {
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('API did not return a server error', function () {",
+            "  pm.expect(pm.response.code).to.be.below(500);",
+            "});",
+            "if (pm.info.requestName === 'Health') {",
+            "  pm.test('Health endpoint reports an operational API', function () {",
+            "    pm.expect(pm.response.code).to.eql(200);",
+            "    pm.expect(pm.response.json().status).to.eql('ok');",
+            "  });",
+            "}",
+            "if (pm.info.requestName === 'Fetch CSRF token') {",
+            "  pm.test('CSRF endpoint returns a token and session ID', function () {",
+            "    pm.expect(pm.response.code).to.eql(200);",
+            "    pm.expect(pm.response.json().csrfToken).to.be.a('string').and.not.empty;",
+            "    pm.expect(pm.response.json().sessionId).to.be.a('string').and.not.empty;",
+            "  });",
+            "}",
+            "if (pm.info.requestName === 'Fetch CSRF token' && pm.response.code === 200) {",
+            "  const payload = pm.response.json();",
+            "  pm.collectionVariables.set('csrfToken', payload.csrfToken);",
+            "  pm.collectionVariables.set('sessionId', payload.sessionId);",
+            "  pm.environment.set('csrfToken', payload.csrfToken);",
+            "  pm.environment.set('sessionId', payload.sessionId);",
+            "}",
+            "if (pm.info.requestName === 'Admin login' && pm.response.code === 200) {",
+            "  pm.collectionVariables.set('adminToken', pm.response.json().token);",
+            "  pm.environment.set('adminToken', pm.response.json().token);",
+            "}",
+            "if (pm.info.requestName === 'Student legacy login' && pm.response.code === 200) {",
+            "  pm.collectionVariables.set('studentToken', pm.response.json().token);",
+            "  pm.environment.set('studentToken', pm.response.json().token);",
+            "}",
+            "if (pm.response.headers.get('Content-Type')?.includes('application/json')) {",
+            "  pm.test('JSON response is parseable', function () {",
+            "    pm.expect(function () { pm.response.json(); }).not.to.throw();",
+            "  });",
+            "}"
+          ]
+        }
+      }
+    ],
+    "item": [
+      {
+        "name": "System",
+        "item": [
+          {
+            "name": "Health",
+            "request": { "method": "GET", "url": "{{baseUrl}}/health" }
+          },
+          {
+            "name": "Readiness",
+            "request": { "method": "GET", "url": "{{baseUrl}}/ready" }
+          },
+          {
+            "name": "Fetch CSRF token",
+            "request": {
+              "method": "GET",
+              "header": [{ "key": "x-session-id", "value": "{{sessionId}}", "disabled": true }],
+              "url": "{{baseUrl}}/csrf-token"
+            }
+          },
+          {
+            "name": "Admin profile without bearer token (expects 401)",
+            "event": [{
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Protected route rejects anonymous request', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([401, 403]);",
+                  "});"
+                ]
+              }
+            }],
+            "request": { "method": "GET", "url": "{{baseUrl}}/admin/me" }
+          }
+        ]
+      },
+      {
+        "name": "Admin authentication and profile",
+        "item": [
+          {
+            "name": "Admin register (blank defaults validate and do not create an account)",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"name\":\"\",\"email\":\"\",\"password\":\"\"}", "options": { "raw": { "language": "json" } } },
+              "url": "{{baseUrl}}/admin/register"
+            }
+          },
+          {
+            "name": "Admin login",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"email\":\"{{adminEmail}}\",\"password\":\"{{adminPassword}}\"}", "options": { "raw": { "language": "json" } } },
+              "url": "{{baseUrl}}/admin/login"
+            }
+          },
+          {
+            "name": "Admin logout",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "url": "{{baseUrl}}/admin/logout"
+            }
+          },
+          {
+            "name": "Forgot admin password",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"email\":\"{{adminEmail}}\"}", "options": { "raw": { "language": "json" } } },
+              "url": "{{baseUrl}}/admin/forgot-password"
+            }
+          },
+          {
+            "name": "Reset admin password",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"password\":\"\"}", "options": { "raw": { "language": "json" } } },
+              "url": "{{baseUrl}}/admin/reset-password/{{resetToken}}"
+            }
+          },
+          {
+            "name": "Get admin profile",
+            "request": {
+              "method": "GET",
+              "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+              "url": "{{baseUrl}}/admin/me"
+            }
+          },
+          {
+            "name": "Update admin password",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"currentPassword\":\"\",\"newPassword\":\"\"}", "options": { "raw": { "language": "json" } } },
+              "url": "{{baseUrl}}/admin/update-password"
+            }
+          },
+          {
+            "name": "Update admin profile",
+            "request": {
+              "method": "PATCH",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"name\":\"\"}", "options": { "raw": { "language": "json" } } },
+              "url": "{{baseUrl}}/admin/profile"
+            }
+          }
+        ]
+      },
+      {
+        "name": "Admin student management",
+        "item": [
+          {
+            "name": "List students",
+            "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/admin/students?page=1&limit=20" }
+          },
+          {
+            "name": "List all students",
+            "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/admin/students/all" }
+          },
+          {
+            "name": "Create student (blank defaults validate and do not create a record)",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"name\":\"\",\"address\":\"\",\"student_email\":\"\",\"parent_email\":\"\",\"parent_telephone\":\"\",\"indexNumber\":\"\",\"dateOfBirth\":\"\"}", "options": { "raw": { "language": "json" } } },
+              "url": "{{baseUrl}}/admin/students"
+            }
+          },
+          {
+            "name": "Replace student (blank defaults validate and do not update)",
+            "request": {
+              "method": "PUT",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"name\":\"\",\"address\":\"\",\"student_email\":\"\",\"parent_email\":\"\",\"parent_telephone\":\"\",\"indexNumber\":\"\",\"dateOfBirth\":\"\"}", "options": { "raw": { "language": "json" } } },
+              "url": "{{baseUrl}}/admin/students/{{studentId}}"
+            }
+          },
+          {
+            "name": "Patch student (empty defaults validate and do not update)",
+            "request": {
+              "method": "PATCH",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{}", "options": { "raw": { "language": "json" } } },
+              "url": "{{baseUrl}}/admin/students/{{studentId}}"
+            }
+          },
+          {
+            "name": "Delete student (disabled by default; destructive)",
+            "request": {
+              "method": "DELETE",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "url": "{{baseUrl}}/admin/students/{{studentId}}"
+            },
+            "disabled": true
+          },
+          {
+            "name": "Generate student QR code",
+            "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/admin/students/{{studentId}}/qr-code" }
+          },
+          {
+            "name": "Get student QR by index",
+            "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/admin/students/qr-code/{{indexNumber}}" }
+          },
+          {
+            "name": "Recent attendance",
+            "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/admin/attendance/recent" }
+          }
+        ]
+      },
+      {
+        "name": "Student portal",
+        "item": [
+          {
+            "name": "Student legacy login",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"student_email\":\"{{studentEmail}}\",\"phoneNumber\":\"{{phoneNumber}}\"}", "options": { "raw": { "language": "json" } } },
+              "url": "{{baseUrl}}/students/login"
+            }
+          },
+          {
+            "name": "Get my profile",
+            "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }], "url": "{{baseUrl}}/students/me" }
+          },
+          {
+            "name": "Update my profile (empty body makes no changes)",
+            "request": {
+              "method": "PATCH",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{studentToken}}" },
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{}", "options": { "raw": { "language": "json" } } },
+              "url": "{{baseUrl}}/students/me"
+            }
+          },
+          {
+            "name": "Get my attendance",
+            "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }], "url": "{{baseUrl}}/students/me/attendance?startDate={{startDate}}&endDate={{endDate}}" }
+          },
+          {
+            "name": "Firebase fallback profile (Firebase ID token)",
+            "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{firebaseStudentToken}}" }], "url": "{{baseUrl}}/students/me/firebase" }
+          },
+          {
+            "name": "Firebase fallback attendance (Firebase ID token)",
+            "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{firebaseStudentToken}}" }], "url": "{{baseUrl}}/students/me/firebase/attendance?startDate={{startDate}}&endDate={{endDate}}" }
+          },
+          {
+            "name": "Firebase fallback QR (Firebase ID token)",
+            "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{firebaseStudentToken}}" }], "url": "{{baseUrl}}/students/me/firebase/qr" }
+          },
+          {
+            "name": "Verify Firebase enrollment (Firebase ID token)",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{firebaseStudentToken}}" },
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"email\":\"{{studentEmail}}\",\"phoneNumber\":\"{{phoneNumber}}\",\"studentId\":\"{{indexNumber}}\"}", "options": { "raw": { "language": "json" } } },
+              "url": "{{baseUrl}}/students/me/verify-enrollment"
+            }
+          }
+        ]
+      },
+      {
+        "name": "Student QR lookup",
+        "item": [
+          {
+            "name": "Search QR by index",
+            "request": { "method": "GET", "url": "{{baseUrl}}/students/search-qr?indexNumber={{indexNumber}}" }
+          },
+          {
+            "name": "Admin student profile and reports",
+            "item": [
+              {
+                "name": "Get student profile",
+                "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/students/profile/{{studentId}}" }
+              },
+              {
+                "name": "Update student profile (empty body makes no changes)",
+                "request": {
+                  "method": "PATCH",
+                  "header": [
+                    { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+                    { "key": "Content-Type", "value": "application/json" },
+                    { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                    { "key": "x-session-id", "value": "{{sessionId}}" }
+                  ],
+                  "body": { "mode": "raw", "raw": "{}", "options": { "raw": { "language": "json" } } },
+                  "url": "{{baseUrl}}/students/profile/{{studentId}}"
+                }
+              },
+              {
+                "name": "Get student attendance history",
+                "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/students/attendance-history/{{studentId}}?startDate={{startDate}}&endDate={{endDate}}" }
+              },
+              {
+                "name": "Get student dashboard statistics",
+                "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/students/dashboard-stats" }
+              }
+            ]
+          },
+          {
+            "name": "Download QR image",
+            "request": { "method": "GET", "url": "{{baseUrl}}/students/download-qr-code?studentId={{studentId}}" }
+          }
+        ]
+      },
+      {
+        "name": "Attendance administration",
+        "item": [
+          {
+            "name": "Configure automatic checkout",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{}", "options": { "raw": { "language": "json" } } },
+              "url": "{{baseUrl}}/attendance/auto-checkout/configure"
+            }
+          },
+          {
+            "name": "Get automatic checkout settings",
+            "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/attendance/auto-checkout/settings" }
+          },
+          {
+            "name": "Run automatic checkout (disabled by default; changes attendance)",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "url": "{{baseUrl}}/attendance/auto-checkout/run"
+            },
+            "disabled": true
+          },
+          {
+            "name": "Get today's attendance",
+            "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/attendance/today" }
+          },
+          {
+            "name": "Get attendance by date",
+            "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/attendance/date/{{date}}" }
+          },
+          {
+            "name": "Get student attendance history",
+            "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/attendance/student/{{studentId}}/history?startDate={{startDate}}&endDate={{endDate}}" }
+          },
+          {
+            "name": "Clear student attendance (disabled by default; destructive)",
+            "request": {
+              "method": "DELETE",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "url": "{{baseUrl}}/attendance/student/{{studentId}}/clear"
+            },
+            "disabled": true
+          },
+          {
+            "name": "Delete attendance record (disabled by default; destructive)",
+            "request": {
+              "method": "DELETE",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "url": "{{baseUrl}}/attendance/student/{{studentId}}/record/{{recordId}}"
+            },
+            "disabled": true
+          },
+          {
+            "name": "Legacy attendance-by-date alias",
+            "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/attendance/{{date}}" }
+          }
+        ]
+      },
+      {
+        "name": "QR scanner and student QR administration",
+        "item": [
+          {
+            "name": "Record QR attendance",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"qrData\":\"{{qrData}}\"}", "options": { "raw": { "language": "json" } } },
+              "url": "{{baseUrl}}/qr/attendance"
+            },
+            "disabled": true
+          },
+          {
+            "name": "Legacy QR attendance alias",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"qrData\":\"{{qrData}}\"}", "options": { "raw": { "language": "json" } } },
+              "url": "{{baseUrl}}/qr/markAttendanceQR"
+            },
+            "disabled": true
+          },
+          {
+            "name": "Get student QR data",
+            "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/qr/student/{{studentId}}" }
+          },
+          {
+            "name": "Save student QR data (blank defaults do not write)",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "x-csrf-token", "value": "{{csrfToken}}" },
+                { "key": "x-session-id", "value": "{{sessionId}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"qrData\":\"\"}", "options": { "raw": { "language": "json" } } },
+              "url": "{{baseUrl}}/qr/student/{{studentId}}"
+              }
+          }
+        ]
+      }
+    ]
+}

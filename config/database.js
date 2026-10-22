@@ -58,8 +58,8 @@ export const connectDB = async () => {
       return connectDB();
     }
 
-    logError('Max connection attempts reached. Exiting process.');
-    process.exit(1);
+    logError('Max MongoDB connection attempts reached.');
+    throw error;
   }
 };
 

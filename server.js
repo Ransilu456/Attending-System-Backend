@@ -10,16 +10,30 @@ import adminRoutes from './routes/admin.routes.js';
 import qrScannerRoutes from './routes/qrScanner.routes.js';
 import attendanceRoutes from './routes/attendance.routes.js';
 
-import { startScheduler } from './services/schedulerService.js';
+import { startScheduler, stopScheduler } from './services/schedulerService.js';
 import { errorHandler } from './middleware/authMiddleware.js';
 import { generateCsrfToken, validateCsrf } from './middleware/csrfMiddleware.js';
 import { printBanner, logInfo, logSuccess, logWarning, logError, logSection, logServerStart, stopSpinner, succeedSpinner } from './utils/terminal.js';
 import { connectDB, closeDB } from './config/database.js';
+import {
+  syncAllStudentsToFirebase,
+  isFirebaseMirrorConfigured,
+  startStudentMirror,
+  stopStudentMirror,
+} from './services/firebaseMirrorService.js';
+import {
+  syncPendingStudentProfileEdits,
+  startStudentProfileEditSync,
+  stopStudentProfileEditSync,
+} from './services/studentProfileEditSyncService.js';
 
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 5001;
+let firebaseConfigured = false;
+let firebaseReconciliationStarted = false;
+let firebaseReconciliationTimer;
 
 // Disable Express fingerprint header
 app.disable('x-powered-by');
@@ -115,34 +129,79 @@ app.use((req, res, next) => {
 });
 
 // CSRF token issuance endpoint (unauthenticated, GET)
-app.get('/api/csrf-token', generateCsrfToken);
+app.get(['/api/v1/csrf-token', '/api/csrf-token'], generateCsrfToken);
 
 // Apply CSRF validation to all state-changing API routes
 app.use('/api/', validateCsrf);
 
-// API route registrations
-app.use('/api/students', studentRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/qr', qrScannerRoutes);
-app.use('/api/attendance', attendanceRoutes);
-app.use('/api/public', express.static('public'));
+const mountApiRoutes = (prefix) => {
+  app.use(`${prefix}/students`, studentRoutes);
+  app.use(`${prefix}/admin`, adminRoutes);
+  app.use(`${prefix}/qr`, qrScannerRoutes);
+  app.use(`${prefix}/attendance`, attendanceRoutes);
+  app.use(`${prefix}/public`, express.static('public'));
+};
+
+const isFirebaseQuotaError = (error) =>
+  Boolean(error) && (
+    error.code === 'FIREBASE_DAILY_LIMIT' ||
+    isFirebaseQuotaError(error.cause)
+  );
+
+const scheduleFirebaseReconciliation = (delay) => {
+  if (firebaseReconciliationTimer) clearTimeout(firebaseReconciliationTimer);
+  firebaseReconciliationTimer = setTimeout(() => {
+    firebaseReconciliationTimer = undefined;
+    void reconcileFirebaseOnStartup();
+  }, delay);
+  firebaseReconciliationTimer.unref?.();
+};
+
+const reconcileFirebaseOnStartup = async () => {
+  if (firebaseReconciliationStarted) return;
+  if (mongoose.connection.readyState !== 1) {
+    scheduleFirebaseReconciliation(30000);
+    return;
+  }
+
+  try {
+    await syncPendingStudentProfileEdits();
+    const result = await syncAllStudentsToFirebase({ failOnSkipped: false });
+    if (result.skipped) {
+      logWarning(`Startup reconciliation skipped ${result.skipped} invalid student record(s); review the errors above.`);
+    }
+    startStudentMirror();
+    startStudentProfileEditSync();
+    firebaseReconciliationStarted = true;
+  } catch (error) {
+    logError(`Firebase startup reconciliation failed: ${error.message}`);
+    const retryDelay = isFirebaseQuotaError(error)
+      ? Math.max(1000, new Date().setUTCHours(24, 0, 0, 0) - Date.now())
+      : 30000;
+    scheduleFirebaseReconciliation(retryDelay);
+  }
+};
+
+mountApiRoutes('/api/v1');
+mountApiRoutes('/api');
 
 // Server health check endpoint
-app.get('/api/health', (req, res) => {
+app.get(['/api/v1/health', '/api/health'], (req, res) => {
   const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
   res.status(200).json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     services: {
-      database: { status: dbStatus, connection: mongoose.connection.host || 'unknown' }
+      database: { status: dbStatus, connection: mongoose.connection.host || 'unknown' },
+      firebase: { status: firebaseConfigured ? 'configured' : 'not-configured' }
     },
     environment: process.env.NODE_ENV || 'development',
-    version: '8.1.0'
+    version: '1.0.0'
   });
 });
 
 // Lightweight readiness check — returns 503 until DB is connected
-app.get('/api/ready', (req, res) => {
+app.get(['/api/v1/ready', '/api/ready'], (req, res) => {
   if (mongoose.connection.readyState === 1) {
     return res.status(200).json({ ready: true });
   }
@@ -164,12 +223,15 @@ app.use(errorHandler);
 // Server startup: listen immediately, connect DB in background for fast local startup
 const startServer = async () => {
   let server;
+  let schedulerStarted = false;
   try {
     printBanner();
 
-    if (!process.env.MONGODB_URI) {
-      logError('Missing MONGODB_URI environment variable. Please check your .env file.');
-      process.exit(1);
+    try {
+      firebaseConfigured = isFirebaseMirrorConfigured();
+      if (firebaseConfigured) logSuccess('Firebase Admin SDK configured');
+    } catch (error) {
+      logError(`Firebase configuration failed: ${error.message}`);
     }
 
     logSection('Configuration');
@@ -182,13 +244,33 @@ const startServer = async () => {
       logSuccess(`Server is running in ${process.env.NODE_ENV || 'development'} mode`);
     });
 
-    // Connect to DB in background so startup is instant locally
+    // Connect to MongoDB in the background so the API can start for Firebase fallback users.
     logSection('Database');
-    connectDB()
-      .then(() => succeedSpinner('db', 'Connected to MongoDB successfully'))
-      .catch(err => logError(`DB connection failed: ${err.message}`));
+    const connectMongo = async () => {
+      try {
+        await connectDB();
+        succeedSpinner('db', 'Connected to MongoDB successfully');
+        if (!schedulerStarted) {
+          startScheduler();
+          schedulerStarted = true;
+        }
+        if (firebaseConfigured) {
+          void reconcileFirebaseOnStartup();
+        }
+      } catch (error) {
+        logError(`MongoDB connection failed: ${error.message}`);
+        if (process.env.MONGODB_URI) {
+          const retry = setTimeout(connectMongo, 30000);
+          retry.unref();
+        }
+      }
+    };
 
-    startScheduler();
+    if (process.env.MONGODB_URI) {
+      connectMongo();
+    } else {
+      logWarning('MONGODB_URI is not configured. API is available, but MongoDB-backed operations will return 503.');
+    }
 
     server.on('error', (error) => {
       if (error.code === 'EADDRINUSE') {
@@ -238,7 +320,11 @@ const startServer = async () => {
         closeDBAndExit();
       });
 
-      function closeDBAndExit() {
+      async function closeDBAndExit() {
+        if (firebaseReconciliationTimer) clearTimeout(firebaseReconciliationTimer);
+        await stopScheduler();
+        await stopStudentMirror();
+        await stopStudentProfileEditSync();
         if (mongoose && mongoose.connection && mongoose.connection.readyState !== 0) {
           closeDB().then(() => {
             logSuccess('Database connection closed.');

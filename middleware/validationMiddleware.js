@@ -196,11 +196,30 @@ export const validateStudentLoginInput = [
     .isEmail().withMessage('Please provide a valid email')
     .normalizeEmail(),
 
-  body('indexNumber')
+  body('phoneNumber')
+    .optional()
     .trim()
-    .notEmpty().withMessage('Index number is required')
+    .matches(/^\+?[\d\s\-()]{7,20}$/).withMessage('Please provide a valid phone number')
+    .custom((value) => {
+      const digits = String(value).replace(/\D/g, '');
+      if (digits.length < 10 || digits.length > 15 || /^0+$/.test(digits)) {
+        throw new Error('Phone number must contain 10-15 digits');
+      }
+      return true;
+    }),
+
+  body('indexNumber')
+    .optional()
+    .trim()
     .isLength({ min: 2, max: 20 }).withMessage('Index number must be 2-20 characters')
     .matches(/^[A-Za-z0-9]+$/).withMessage('Index number must contain only alphanumeric characters'),
+
+  body('student_email').custom((value, { req }) => {
+    if (!req.body.phoneNumber && !req.body.indexNumber) {
+      throw new Error('Phone number is required');
+    }
+    return true;
+  }),
 
   validateRequest
 ];

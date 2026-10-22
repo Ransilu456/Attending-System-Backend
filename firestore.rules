@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isStudentOwner(studentId) {
+      return request.auth != null
+        && request.auth.uid == studentId;
+    }
+
+    function validProfileEdit(studentId) {
+      let data = request.resource.data;
+      let updates = data.updates;
+      return data.keys().hasOnly([
+          'studentId', 'updates', 'baseUpdatedAt', 'status', 'createdAt'
+        ])
+        && data.studentId == studentId
+        && data.status == 'pending'
+        && data.baseUpdatedAt is timestamp
+        && data.createdAt is timestamp
+        && updates is map
+        && updates.keys().hasOnly([
+          'name', 'student_email', 'address', 'parent_email',
+          'parent_telephone', 'dateOfBirth', 'profileImage'
+        ])
+        && updates.keys().hasAny([
+          'name', 'student_email', 'address', 'parent_email',
+          'parent_telephone', 'dateOfBirth', 'profileImage'
+        ])
+        && (!updates.keys().hasAny(['name'])
+          || (updates.name is string
+            && updates.name.size() >= 2
+            && updates.name.size() <= 50))
+        && (!updates.keys().hasAny(['student_email'])
+          || (updates.student_email is string
+            && updates.student_email.size() <= 254
+            && updates.student_email.matches('^[^@ ]+@[^@ ]+\\.[^@ ]+$')))
+        && (!updates.keys().hasAny(['address'])
+          || (updates.address is string
+            && updates.address.size() >= 5
+            && updates.address.size() <= 200))
+        && (!updates.keys().hasAny(['parent_email'])
+          || (updates.parent_email is string
+            && updates.parent_email.size() <= 254
+            && updates.parent_email.matches('^[^@ ]+@[^@ ]+\\.[^@ ]+$')))
+        && (!updates.keys().hasAny(['parent_telephone'])
+          || (updates.parent_telephone is string
+            && updates.parent_telephone.matches('^\\+?[0-9 ()-]{10,20}$')))
+        && (!updates.keys().hasAny(['dateOfBirth'])
+          || updates.dateOfBirth == null
+          || (updates.dateOfBirth is timestamp
+            && updates.dateOfBirth < request.time))
+        && (!updates.keys().hasAny(['profileImage'])
+          || updates.profileImage == null
+          || (updates.profileImage is string
+            && updates.profileImage.size() <= 700000));
+    }
+
+    match /students/{studentId} {
+      allow get: if isStudentOwner(studentId);
+      allow list, create, update, delete: if false;
+    }
+
+    match /studentProfileEdits/{studentId}/requests/{requestId} {
+      allow get, list: if isStudentOwner(studentId);
+      allow create: if isStudentOwner(studentId)
+        && validProfileEdit(studentId);
+      allow update: if isStudentOwner(studentId)
+        && resource.data.status == 'pending'
+        && request.resource.data.baseUpdatedAt == resource.data.baseUpdatedAt
+        && request.resource.data.createdAt == resource.data.createdAt
+        && validProfileEdit(studentId);
+      allow delete: if false;
+    }
+  }
+}

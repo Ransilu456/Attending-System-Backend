@@ -91,6 +91,11 @@ const studentSchema = new mongoose.Schema({
     default: 0,
     min: [0, 'Attendance count cannot be negative']
   },
+  attendanceExpectedSessions: {
+    type: Number,
+    default: 0,
+    min: [0, 'Expected attendance sessions cannot be negative']
+  },
   attendanceHistory: [{
     date: { 
       type: Date, 
@@ -264,14 +269,27 @@ studentSchema.methods.markAttendance = async function(status, adminId = null, de
 
   this.lastAttendance = now;
   
-  const totalRecords = this.attendanceHistory.length;
-  const presentRecords = this.attendanceHistory.filter(record => 
-    record.status === 'present' || record.status === 'entered' || record.status === 'left'
-  ).length;
+  const attendedDates = new Set();
+  this.attendanceHistory.forEach(record => {
+    if (['present', 'entered', 'left'].includes(record.status) && record.date) {
+      attendedDates.add(new Date(record.date).toISOString().split('T')[0]);
+    }
+  });
+
+  const presentDays = attendedDates.size;
+  this.attendanceCount = presentDays;
+
+  // Expected sessions held since student's registration
+  const regDate = this.createdAt ? new Date(this.createdAt) : (this.attendanceHistory[0]?.date ? new Date(this.attendanceHistory[0].date) : now);
+  const msDiff = Math.max(0, now.getTime() - regDate.getTime());
+  const daysSinceReg = Math.max(1, Math.ceil(msDiff / (1000 * 60 * 60 * 24)));
   
-  this.attendancePercentage = totalRecords > 0 
-    ? (presentRecords / totalRecords) * 100 
-    : 0;
+  // Approximate week sessions (or at least attended days)
+  const expectedSessions = Math.max(presentDays, Math.min(daysSinceReg, Math.round(daysSinceReg * (5 / 7))));
+  
+  this.attendancePercentage = expectedSessions > 0
+    ? Math.min(100, Math.round((presentDays / expectedSessions) * 100))
+    : (presentDays > 0 ? 100 : 0);
 
   await this.save();
   return this;

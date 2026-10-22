@@ -4,10 +4,11 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test",
     "start": "node server.js",
     "dev": "nodemon server.js",
     "build": "npm install",
+    "migrate:firebase": "node utils/scripts/migrate_students_to_firebase.js",
     "change-role": "node utils/scripts/change-role.js"
   },
   "keywords": [
@@ -29,6 +30,7 @@
     "express-rate-limit": "^7.5.0",
     "express-validator": "^7.2.1",
     "figlet": "^1.8.2",
+    "firebase-admin": "^14.5.0",
     "gradient-string": "^3.0.0",
     "jsonwebtoken": "^9.0.2",
     "luxon": "^3.5.0",
