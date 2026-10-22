@@ -56,3 +56,9 @@ test('rejects malformed emails, addresses, phone numbers, and future birth dates
   assert.match(normalizeStudentProfileUpdates({ parent_telephone: '123' }).error, /telephone/i);
   assert.match(normalizeStudentProfileUpdates({ dateOfBirth: new Date(Date.now() + 60_000) }).error, /past/i);
 });
+
+test('rejects emoji and executable markup while allowing Sinhala names', () => {
+  assert.match(normalizeStudentProfileUpdates({ name: 'Student 😀' }).error, /unsupported characters/i);
+  assert.match(normalizeStudentProfileUpdates({ address: '<script>alert(1)</script>' }).error, /unsupported characters/i);
+  assert.equal(normalizeStudentProfileUpdates({ name: 'අමල් පෙරේරා' }).error, undefined);
+});

@@ -1,5 +1,11 @@
 import mongoose from 'mongoose';
 import validator from 'validator';
+import { isSafeUserText } from '../utils/inputValidation.js';
+
+const safeTextValidator = {
+  validator: isSafeUserText,
+  message: 'Text contains unsupported characters or executable markup.',
+};
 
 // Student document schema definition
 const studentSchema = new mongoose.Schema({
@@ -8,12 +14,17 @@ const studentSchema = new mongoose.Schema({
     required: [true, 'Name is required'],
     trim: true,
     minlength: [2, 'Name must be at least 2 characters long'],
-    maxlength: [50, 'Name cannot exceed 50 characters']
+    maxlength: [50, 'Name cannot exceed 50 characters'],
+    match: [/^[\p{L}\p{M}\s'.,-]+$/u, 'Name contains invalid characters'],
+    validate: safeTextValidator,
   },
   address: {
     type: String,
     required: [true, 'Address is required'],
-    trim: true
+    trim: true,
+    minlength: [5, 'Address must be at least 5 characters long'],
+    maxlength: [200, 'Address cannot exceed 200 characters'],
+    validate: safeTextValidator,
   },
   student_email: {
     type: String,
@@ -21,7 +32,10 @@ const studentSchema = new mongoose.Schema({
     unique: true,
     lowercase: true,
     trim: true,
-    validate: [validator.isEmail, 'Please provide a valid email']
+    validate: [
+      { validator: validator.isEmail, message: 'Please provide a valid email' },
+      safeTextValidator,
+    ]
   },
   parent_email: {
     type: String,
@@ -30,7 +44,10 @@ const studentSchema = new mongoose.Schema({
     },
     lowercase: true,
     trim: true,
-    validate: [validator.isEmail, 'Please provide a valid email'],
+    validate: [
+      { validator: validator.isEmail, message: 'Please provide a valid email' },
+      safeTextValidator,
+    ],
     default: function() {
       return this.student_email || 'default@example.com';
     }
@@ -45,7 +62,7 @@ const studentSchema = new mongoose.Schema({
       validator: function(v) {
         if (!v) return true;
         const formattedNumber = v.replace(/[\s-]/g, '');
-        return /^\+?\d{10,15}$/.test(formattedNumber);
+        return /^\+?\d{10,15}$/.test(formattedNumber) && isSafeUserText(v);
       },
       message: props => `${props.value} is not a valid phone number! Should contain 10-15 digits, optionally starting with +`
     },
@@ -57,7 +74,8 @@ const studentSchema = new mongoose.Schema({
     unique: true,
     trim: true,
     uppercase: true,
-    index: true
+    index: true,
+    validate: safeTextValidator,
   },
   dateOfBirth: {
     type: Date,
@@ -74,7 +92,8 @@ const studentSchema = new mongoose.Schema({
   },
   profileImage: {
     type: String,
-    default: null
+    default: null,
+    validate: safeTextValidator,
   },
   qrCode: {
     type: String,
@@ -126,11 +145,13 @@ const studentSchema = new mongoose.Schema({
     },
     scanLocation: {
       type: String,
-      default: 'Main Entrance'
+      default: 'Main Entrance',
+      validate: safeTextValidator,
     },
     deviceInfo: {
       type: String,
-      default: null
+      default: null,
+      validate: safeTextValidator,
     }
   }],
   status: {
@@ -159,7 +180,8 @@ const studentSchema = new mongoose.Schema({
     },
     url: {
       type: String,
-      trim: true
+      trim: true,
+      validate: safeTextValidator,
     },
     status: {
       type: String,

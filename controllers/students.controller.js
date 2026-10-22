@@ -30,13 +30,13 @@ const studentDataForFallback = async (studentId, { forceRefresh = false } = {}) 
   }
 
   if (!getFirebaseAdmin()) {
-    const error = new Error('The teacher server is offline and Firebase student access is not configured.');
+    const error = new Error('Student information is temporarily unavailable. Please try again later.');
     error.code = 'STUDENT_DATA_UNAVAILABLE';
     throw error;
   }
   const student = await readStudentDocument(studentId, { forceRefresh });
   if (!student) {
-    const error = new Error('Your student record is not available in Firebase. Please contact your teacher.');
+    const error = new Error('Your student record is unavailable. Please contact your teacher.');
     error.code = 'STUDENT_RECORD_NOT_FOUND';
     throw error;
   }
@@ -47,7 +47,7 @@ const sendStudentFallbackError = (res, error) => {
   if (error.code === 'FIREBASE_DAILY_LIMIT') {
     return res.status(429).json({
       success: false,
-      message: 'Student data is temporarily unavailable because the daily Firebase usage limit has been reached. Please try again after the daily reset.',
+      message: 'Student information is temporarily unavailable. Please try again later.',
     });
   }
   if (error.code === 'STUDENT_DATA_UNAVAILABLE') {
@@ -76,7 +76,7 @@ function safeError(err) {
 export const downloadQRCode = async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) {
-      return res.status(503).json({ success: false, message: 'MongoDB is unavailable.' });
+      return res.status(503).json({ success: false, message: 'The service is temporarily unavailable. Please try again later.' });
     }
 
     const { indexNumber, name, studentId } = req.query;
@@ -110,7 +110,7 @@ export const downloadQRCode = async (req, res) => {
     return res.send(qrCodeBuffer);
   } catch (error) {
     if (isMongoUnavailable(error)) {
-      return res.status(503).json({ success: false, message: 'MongoDB is unavailable.' });
+      return res.status(503).json({ success: false, message: 'The service is temporarily unavailable. Please try again later.' });
     }
     res.status(500).json({ message: 'Error downloading QR code', error: error.message });
   }
@@ -120,7 +120,7 @@ export const downloadQRCode = async (req, res) => {
 export const searchQRCode = async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) {
-      return res.status(503).json({ success: false, message: 'MongoDB is unavailable.' });
+      return res.status(503).json({ success: false, message: 'The service is temporarily unavailable. Please try again later.' });
     }
 
     const { name, indexNumber } = req.query;
@@ -146,7 +146,7 @@ export const searchQRCode = async (req, res) => {
     res.status(200).json({ qrCode: student.qrCode });
   } catch (error) {
     if (isMongoUnavailable(error)) {
-      return res.status(503).json({ success: false, message: 'MongoDB is unavailable.' });
+      return res.status(503).json({ success: false, message: 'The service is temporarily unavailable. Please try again later.' });
     }
     res.status(500).json({ message: 'Error searching for student', error: error.message });
   }
@@ -354,14 +354,14 @@ export const createStudentSession = async (req, res) => {
   if (typeof idToken !== 'string' || !idToken || idToken.length > 5000) {
     return res.status(400).json({
       success: false,
-      message: 'A valid Firebase student sign-in is required.',
+      message: 'A valid student sign-in is required.',
     });
   }
 
   if (mongoose.connection.readyState !== 1) {
     return res.status(503).json({
       success: false,
-      message: 'Student session service is unavailable while MongoDB is offline.',
+      message: 'Student session service is temporarily unavailable. Please try again later.',
     });
   }
 
@@ -404,7 +404,7 @@ export const createStudentSession = async (req, res) => {
     if (isMongoUnavailable(error)) {
       return res.status(503).json({
         success: false,
-        message: 'Student session service is unavailable while MongoDB is offline.',
+        message: 'Student session service is temporarily unavailable. Please try again later.',
       });
     }
     return res.status(401).json({ success: false, message: 'Student sign-in could not be verified.' });
@@ -450,7 +450,7 @@ export const logoutStudent = async (req, res) => {
     if (isMongoUnavailable(error)) {
       return res.status(503).json({
         success: false,
-        message: 'Could not revoke the server session while MongoDB is offline.',
+        message: 'Could not complete sign-out. Please try again later.',
       });
     }
     return res.status(500).json({
@@ -478,7 +478,7 @@ export const getMyProfile = async (req, res) => {
     if (isMongoUnavailable(error)) {
       return res.status(503).json({
         success: false,
-        message: 'MongoDB is unavailable. Please use the Firebase student sign-in.'
+        message: 'The service is temporarily unavailable. Please try again later.'
       });
     }
     res.status(500).json({ message: 'Error fetching student profile' });
@@ -528,7 +528,7 @@ export const updateMyProfile = async (req, res) => {
       return res.status(400).json({ message: messages.join(', ') });
     }
     if (isMongoUnavailable(error)) {
-      return res.status(503).json({ success: false, message: 'MongoDB is unavailable.' });
+      return res.status(503).json({ success: false, message: 'The service is temporarily unavailable. Please try again later.' });
     }
     res.status(500).json({ message: 'Error updating profile', error: error.message });
   }
@@ -579,7 +579,7 @@ export const getMyAttendance = async (req, res) => {
     });
   } catch (error) {
     if (isMongoUnavailable(error)) {
-      return res.status(503).json({ success: false, message: 'MongoDB is unavailable.' });
+      return res.status(503).json({ success: false, message: 'The service is temporarily unavailable. Please try again later.' });
     }
     res.status(500).json({ message: 'Error fetching attendance', error: error.message });
   }

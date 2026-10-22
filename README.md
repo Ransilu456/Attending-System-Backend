@@ -176,12 +176,12 @@ Only student records are copied from MongoDB into Firebase; admin documents, cre
 
 After MongoDB connects, the scheduler catches up on unfinished past attendance and recalculates attendance rates and expected sessions. Startup synchronization applies pending Firebase profile edits first, mirrors all MongoDB student records (including attendance history and last-attendance dates) to Firestore, then starts the change stream and profile-edit polling. MongoDB is authoritative except for validated, version-matched profile-edit requests. Startup sync failures are logged and retried; quota exhaustion waits until the next UTC day. At 12:00 AM and 6:30 AM in the server's local time zone, attendance processing repeats; resulting MongoDB changes are mirrored incrementally. The existing automatic checkout and student-status task remains scheduled for 6:45 PM. Each MongoDB student change reads that student's Firestore document for comparison, and writes it only if the mirrored data changed.
 
-Firestore operations made by this backend are capped at 40,000 reads and 18,000 writes per UTC day by default. Configure `FIREBASE_DAILY_READ_LIMIT`, `FIREBASE_DAILY_WRITE_LIMIT`, and optionally `FIREBASE_QUOTA_USAGE_PATH`; persistent counters live in `.firebase-quota-usage.json` and are excluded from Git. The backend creates this quota file and `.firebase-sync-token.json` automatically; the corresponding path variables are optional overrides. These are per-backend-instance app counters, not Firebase's project-wide usage meter. Run only one backend instance using the quota file, and retain headroom for Console activity and other services. At the write limit the change stream pauses without advancing its resume token and retries after UTC midnight.
+Firestore operations made by this backend are capped at 40,000 reads and 18,000 writes per UTC day by default. Configure `FIREBASE_DAILY_READ_LIMIT`, `FIREBASE_DAILY_WRITE_LIMIT`, and optionally `FIREBASE_QUOTA_USAGE_PATH`; persistent counters live in `.firebase-quota-usage.json` and are excluded from Git. The backend creates this quota file and `.firebase-sync-token.json` automatically; the corresponding path variables are optional overrides. These are per-backend-instance app counters, not Firebase's project-wide usage meter. Run only one backend instance using the quota file, and retain headroom for Console activity and other services. Transient Windows file locks during quota-file replacement are retried; if the file remains locked, startup reconciliation fails explicitly and retries. At the write limit the change stream pauses without advancing its resume token and retries after UTC midnight.
 
 ### Configure Firebase
 
 1. Create a Firebase project and enable **Authentication → Email/Password** and **Cloud Firestore**.
-2. In Firebase, publish the rules from [`firestore.rules`](./firestore.rules).
+2. From the repository root, deploy the Firestore rules and required profile-edit index with `firebase deploy --only firestore:rules,firestore:indexes --project <your-project-id>`. The root [`firebase.json`](../firebase.json) points to [`firestore.rules`](./firestore.rules) and [`firestore.indexes.json`](./firestore.indexes.json). Startup applies pending student profile edits before mirroring MongoDB records; the `requests.status` collection-group index is required for that queue query.
 3. Create a service-account key for the backend. Keep it private and out of source control.
 4. Configure the backend environment:
 
@@ -236,6 +236,14 @@ MongoDB change streams require a replica set (including a single-node replica se
 Permanent per-student data problems (for example, an index shorter than six characters, an email conflict, or a document over the size limit) are logged and skipped so they do not block other students; fix the MongoDB record to emit a new change and retry that student. If MongoDB reports an expired change-stream history token, stop the backend, rerun the full migration, remove the saved token file, and restart.
 
 Firestore rules allow each Firebase student to read only their own mirrored student document and submit restricted profile-edit requests. The backend polls requests and applies validated changes to MongoDB when the teacher server is running; MongoDB remains authoritative and its change stream mirrors accepted updates back to Firestore. Direct browser reads and request writes are outside the backend's daily Firestore quota counters. Admin accounts and teacher/admin workflows continue to use the protected MongoDB API and are not provided Firebase student access by this setup.
+
+All API request bodies and query values are checked for emoji, control/bidi
+characters, executable markup, and unsafe Mongo-style object keys before route
+handlers run. Mongoose schemas and Firestore rules validate persisted student
+text again. Browser text fields block emoji and executable markup as immediate
+feedback. These checks reject operator-shaped object keys such as `$where`;
+they do not blacklist ordinary words like `select` or `drop`. Database queries
+must continue to use fixed query structures and validated values.
 
 ### Versioned API
 

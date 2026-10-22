@@ -6,6 +6,8 @@ import { getFirebaseAdmin } from '../config/firebase.js';
 const DEFAULT_DAILY_READ_LIMIT = 40000;
 const DEFAULT_DAILY_WRITE_LIMIT = 18000;
 const STUDENT_DOCUMENT_CACHE_MS = 30_000;
+const RENAME_RETRY_DELAYS_MS = [50, 100, 200, 400, 800];
+const TRANSIENT_FILE_ERROR_CODES = new Set(['EBUSY', 'EACCES', 'EPERM']);
 
 let usageState;
 let usageDate;
@@ -32,6 +34,19 @@ const getDailyLimit = (operation) => {
 };
 
 const getUtcDate = () => new Date().toISOString().slice(0, 10);
+
+const renameWithRetry = async (source, destination) => {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await fs.rename(source, destination);
+      return;
+    } catch (error) {
+      const delay = RENAME_RETRY_DELAYS_MS[attempt];
+      if (!delay || !TRANSIENT_FILE_ERROR_CODES.has(error.code)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+};
 
 const loadUsage = async () => {
   const today = getUtcDate();
@@ -66,7 +81,7 @@ const persistUsage = async (state) => {
   const temporaryPath = `${usagePath}.${process.pid}.${randomUUID()}.tmp`;
   try {
     await fs.writeFile(temporaryPath, JSON.stringify(state), { encoding: 'utf8', flag: 'wx' });
-    await fs.rename(temporaryPath, usagePath);
+    await renameWithRetry(temporaryPath, usagePath);
   } catch (error) {
     await fs.rm(temporaryPath, { force: true }).catch(() => {});
     throw new Error(`Could not persist Firebase quota state: ${error.message}`, { cause: error });

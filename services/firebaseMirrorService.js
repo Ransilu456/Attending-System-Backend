@@ -243,6 +243,18 @@ const processChange = async (change) => {
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export const consumeChangeStream = async (stream, onChange) => {
+  if (typeof stream?.next !== 'function') {
+    throw new TypeError('MongoDB change stream does not provide a next() method.');
+  }
+
+  while (true) {
+    const change = await stream.next();
+    if (!change) return;
+    await onChange(change);
+  }
+};
+
 const runChangeStream = async () => {
   while (!stopRequested) {
     let stream;
@@ -258,10 +270,10 @@ const runChangeStream = async () => {
         ? 'Firebase student mirror resumed from its saved MongoDB change token.'
         : 'Firebase student mirror is watching MongoDB changes; run the migration script for existing students.');
 
-      for await (const change of stream) {
+      await consumeChangeStream(stream, async (change) => {
         await processChange(change);
         await saveResumeToken(change._id);
-      }
+      });
     } catch (error) {
       if (!stopRequested && error.code === 'FIREBASE_DAILY_LIMIT') {
         const nextUtcDay = new Date();

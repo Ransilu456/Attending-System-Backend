@@ -66,7 +66,7 @@ router.get('/search-qr', qrLimiter, searchQRCode);
 // Student authentication route
 router.post('/login', loginLimiter, (req, res) => res.status(410).json({
   success: false,
-  message: 'Student sign-in now requires Firebase email and password authentication.',
+  message: 'Student sign-in requires your registered email and password.',
 }));
 router.post('/session', loginLimiter, createStudentSession);
 router.get('/session', verifyStudent, restoreStudentSession);

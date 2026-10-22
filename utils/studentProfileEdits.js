@@ -1,3 +1,5 @@
+import { isSafeUserText } from './inputValidation.js';
+
 export const STUDENT_PROFILE_EDIT_FIELDS = Object.freeze([
   'name',
   'student_email',
@@ -9,7 +11,7 @@ export const STUDENT_PROFILE_EDIT_FIELDS = Object.freeze([
 ]);
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const NAME_PATTERN = /^[a-zA-Z\s'.,-]+$/;
+const NAME_PATTERN = /^[\p{L}\p{M}\s'.,-]+$/u;
 const PHONE_PATTERN = /^\+?\d{10,15}$/;
 
 export const normalizeStudentProfileUpdates = (input) => {
@@ -49,6 +51,9 @@ export const normalizeStudentProfileUpdates = (input) => {
       if (typeof value !== 'string' || value.length > 2 * 1024 * 1024) {
         return { error: 'Profile image must be a string no larger than 2 MB.' };
       }
+      if (!isSafeUserText(value)) {
+        return { error: 'Profile image contains unsupported input.' };
+      }
       updates[field] = value;
       continue;
     }
@@ -57,6 +62,9 @@ export const normalizeStudentProfileUpdates = (input) => {
       return { error: `${field} must be text.` };
     }
     const normalized = value.trim();
+    if (!isSafeUserText(normalized)) {
+      return { error: `${field} contains unsupported characters or markup.` };
+    }
 
     if (field === 'name' && (
       normalized.length < 2 ||

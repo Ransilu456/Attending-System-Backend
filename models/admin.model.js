@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs'; 
 import validator from 'validator';
 import crypto from 'crypto';
+import { isSafeUserText } from '../utils/inputValidation.js';
 
 // Admin user schema definition
 const adminSchema = new mongoose.Schema(
@@ -11,7 +12,12 @@ const adminSchema = new mongoose.Schema(
       required: [true, 'Name is required'],
       trim: true,
       minlength: [2, 'Name must be at least 2 characters long'],
-      maxlength: [50, 'Name cannot exceed 50 characters']
+      maxlength: [50, 'Name cannot exceed 50 characters'],
+      match: [/^[\p{L}\p{M}\s'.,-]+$/u, 'Name contains invalid characters'],
+      validate: {
+        validator: isSafeUserText,
+        message: 'Name contains unsupported characters or executable markup.',
+      },
     },
     email: {
       type: String,
@@ -25,6 +31,10 @@ const adminSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Password is required'],
       minlength: [8, 'Password must be at least 8 characters long'],
+      validate: {
+        validator: isSafeUserText,
+        message: 'Password contains unsupported characters.',
+      },
       select: false 
     },
     role: {

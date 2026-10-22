@@ -91,7 +91,10 @@ export const validateCsrf = async (req, res, next) => {
     next();
   } catch (error) {
     if (isMongoUnavailable(error)) {
-      return res.status(503).json({ success: false, message: 'MongoDB is unavailable.' });
+      return res.status(503).json({
+        success: false,
+        message: 'The security check is temporarily unavailable. Please try again later.',
+      });
     }
     next(error);
   }

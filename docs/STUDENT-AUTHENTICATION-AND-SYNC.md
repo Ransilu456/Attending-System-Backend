@@ -62,6 +62,14 @@ After MongoDB connects, startup reconciliation runs in this order:
 3. Start the MongoDB change stream and the continuing pending-profile-edit
    polling service.
 
+The `requests.status` collection and collection-group indexes in
+`firestore.indexes.json` must be deployed for step 1 and for the student's
+per-student pending-edit query. Without either required index, Firestore
+returns `FAILED_PRECONDITION`; queued edits remain pending or the student
+portal cannot load its profile. Startup reconciliation retries. Scheduled
+attendance processing does not run a second full mirror during startup; the
+server's ordered reconciliation owns the initial profile-edit drain and mirror.
+
 Thus queued profile edits are accepted into MongoDB before the Firebase mirror
 replaces Firestore's student document. For conflicts, MongoDB wins except for
 validated profile-edit requests that pass the compare-and-set check. Students

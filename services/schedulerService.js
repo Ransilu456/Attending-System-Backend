@@ -1,6 +1,5 @@
 import { logInfo, logError } from '../utils/terminal.js';
 import { autoMarkLeaveAttendance, checkAllPastAttendance, updateStudentStatuses } from './autoAttendanceService.js';
-import { isFirebaseMirrorConfigured, syncAllStudentsToFirebase } from './firebaseMirrorService.js';
 import { syncAllStudentAttendanceRates } from '../sync_attendance_rates.js';
 
 const DAILY_PROCESSING_TIMES = [
@@ -19,14 +18,9 @@ const runDailyProcessing = (trigger) => {
     logInfo(`Starting attendance processing (${trigger})...`);
     await checkAllPastAttendance();
     await syncAllStudentAttendanceRates();
-    if (trigger === 'server startup' && isFirebaseMirrorConfigured()) {
-      await syncAllStudentsToFirebase();
-    } else if (trigger === 'server startup') {
-      logError('Startup Firebase reconciliation skipped because Firebase Admin is not configured.');
-    }
     logInfo(`Attendance processing completed (${trigger}); MongoDB changes are mirrored incrementally.`);
   }).catch((error) => {
-    logError(`Attendance processing or Firebase reconciliation failed (${trigger}): ${error.message}`);
+    logError(`Attendance processing failed (${trigger}): ${error.message}`);
   });
   dailyTask = task;
   activeDailyTask = task;
@@ -46,7 +40,7 @@ const scheduleDailyProcessing = ({ hour, minute, label }) => {
   }, target.getTime() - now.getTime());
   timers.add(timer);
   timer.unref?.();
-  logInfo(`Next attendance processing and Firebase reconciliation scheduled for: ${target.toLocaleString()}`);
+  logInfo(`Next attendance processing scheduled for: ${target.toLocaleString()}`);
 };
 
 const scheduleAutoCheckout = () => {

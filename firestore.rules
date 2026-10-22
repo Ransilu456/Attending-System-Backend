@@ -6,6 +6,19 @@ service cloud.firestore {
         && request.auth.uid == studentId;
     }
 
+    function hasEmoji(value) {
+      return value.matches('.*[\\x{1F000}-\\x{1FAFF}\\x{2600}-\\x{27BF}\\x{FE0F}\\x{200D}\\x{20E3}].*');
+    }
+
+    function safeText(value) {
+      return value is string
+        && !hasEmoji(value)
+        && !value.matches('.*[<>].*')
+        && !value.matches('.*javascript\\s*:.*')
+        && !value.matches('.*[\\x{0000}-\\x{0008}\\x{000B}\\x{000C}\\x{000E}-\\x{001F}\\x{007F}-\\x{009F}].*')
+        && !value.matches('.*[\\x{200B}-\\x{200F}\\x{202A}-\\x{202E}\\x{2066}-\\x{2069}\\x{FEFF}].*');
+    }
+
     function validProfileEdit(studentId) {
       let data = request.resource.data;
       let updates = data.updates;
@@ -28,22 +41,27 @@ service cloud.firestore {
         && (!updates.keys().hasAny(['name'])
           || (updates.name is string
             && updates.name.size() >= 2
-            && updates.name.size() <= 50))
+            && updates.name.size() <= 50
+            && safeText(updates.name)))
         && (!updates.keys().hasAny(['student_email'])
           || (updates.student_email is string
             && updates.student_email.size() <= 254
-            && updates.student_email.matches('^[^@ ]+@[^@ ]+\\.[^@ ]+$')))
+            && updates.student_email.matches('^[^@ ]+@[^@ ]+\\.[^@ ]+$')
+            && safeText(updates.student_email)))
         && (!updates.keys().hasAny(['address'])
           || (updates.address is string
             && updates.address.size() >= 5
-            && updates.address.size() <= 200))
+            && updates.address.size() <= 200
+            && safeText(updates.address)))
         && (!updates.keys().hasAny(['parent_email'])
           || (updates.parent_email is string
             && updates.parent_email.size() <= 254
-            && updates.parent_email.matches('^[^@ ]+@[^@ ]+\\.[^@ ]+$')))
+            && updates.parent_email.matches('^[^@ ]+@[^@ ]+\\.[^@ ]+$')
+            && safeText(updates.parent_email)))
         && (!updates.keys().hasAny(['parent_telephone'])
           || (updates.parent_telephone is string
-            && updates.parent_telephone.matches('^\\+?[0-9 ()-]{10,20}$')))
+            && updates.parent_telephone.matches('^\\+?[0-9 ()-]{10,20}$')
+            && safeText(updates.parent_telephone)))
         && (!updates.keys().hasAny(['dateOfBirth'])
           || updates.dateOfBirth == null
           || (updates.dateOfBirth is timestamp
@@ -51,7 +69,8 @@ service cloud.firestore {
         && (!updates.keys().hasAny(['profileImage'])
           || updates.profileImage == null
           || (updates.profileImage is string
-            && updates.profileImage.size() <= 700000));
+            && updates.profileImage.size() <= 700000
+            && safeText(updates.profileImage)));
     }
 
     match /students/{studentId} {

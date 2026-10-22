@@ -1,12 +1,12 @@
 import { validationResult, body, param, query } from 'express-validator';
 import { resolveId } from '../utils/idMask.js';
+import { isSafeUserText } from '../utils/inputValidation.js';
 
 // Inspect validation results and return formatted error messages
 export const validateRequest = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     const errorList = errors.array().map(err => ({ field: err.path, message: err.msg }));
-    // Never log user input — only field names
     return res.status(400).json({
       status: 'fail',
       message: 'Validation failed',
@@ -16,14 +16,12 @@ export const validateRequest = (req, res, next) => {
   next();
 };
 
-// Validation rules for administrator registration and credentials
 export const validateAdminInput = [
   body('name')
     .trim()
     .notEmpty().withMessage('Name is required')
     .isLength({ min: 2, max: 50 }).withMessage('Name must be between 2 and 50 characters')
-    .matches(/^[a-zA-Z\s'.,-]+$/).withMessage('Name contains invalid characters')
-    .escape(),
+    .matches(/^[\p{L}\p{M}\s'.,-]+$/u).withMessage('Name contains invalid characters'),
 
   body('email')
     .trim()
@@ -47,14 +45,46 @@ export const validateAdminInput = [
   validateRequest
 ];
 
+export const validateAdminProfileInput = [
+  body('name')
+    .optional()
+    .trim()
+    .isLength({ min: 2, max: 50 }).withMessage('Name must be between 2 and 50 characters')
+    .matches(/^[\p{L}\p{M}\s'.,-]+$/u).withMessage('Name contains invalid characters'),
+
+  body('email')
+    .optional()
+    .trim()
+    .isEmail().withMessage('Please provide a valid email')
+    .isLength({ max: 254 }).withMessage('Email is too long')
+    .normalizeEmail(),
+
+  body().custom((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error('Profile must be an object.');
+    }
+    const allowedFields = new Set(['name', 'email']);
+    if (!Object.keys(value).length || Object.keys(value).some((field) => !allowedFields.has(field))) {
+      throw new Error('Profile contains unsupported fields.');
+    }
+    for (const field of ['name', 'email']) {
+      if (value[field] !== undefined && !isSafeUserText(value[field])) {
+        throw new Error(`${field} contains unsupported characters.`);
+      }
+    }
+    return true;
+  }),
+
+  validateRequest,
+];
+
 // Validation rules for creating a new student record
 export const validateStudentInput = [
   body('name')
     .trim()
     .notEmpty().withMessage('Name is required')
     .isLength({ min: 2, max: 50 }).withMessage('Name must be between 2 and 50 characters')
-    .matches(/^[a-zA-Z\s'.,-]+$/).withMessage('Name contains invalid characters')
-    .escape(),
+    .matches(/^[\p{L}\p{M}\s'.,-]+$/u).withMessage('Name contains invalid characters'),
 
   body('address')
     .trim()
@@ -108,8 +138,7 @@ export const validateStudentUpdateInput = [
     .optional({ checkFalsy: true })
     .trim()
     .isLength({ min: 2, max: 50 }).withMessage('Name must be between 2 and 50 characters')
-    .matches(/^[a-zA-Z\s'.,-]+$/).withMessage('Name contains invalid characters')
-    .escape(),
+    .matches(/^[\p{L}\p{M}\s'.,-]+$/u).withMessage('Name contains invalid characters'),
 
   body('address')
     .optional({ checkFalsy: true })

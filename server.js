@@ -13,6 +13,7 @@ import attendanceRoutes from './routes/attendance.routes.js';
 import { startScheduler, stopScheduler } from './services/schedulerService.js';
 import { errorHandler } from './middleware/authMiddleware.js';
 import { generateCsrfToken, validateCsrf } from './middleware/csrfMiddleware.js';
+import { validateInputPayload } from './utils/inputValidation.js';
 import { printBanner, logInfo, logSuccess, logWarning, logError, logSection, logServerStart, stopSpinner, succeedSpinner } from './utils/terminal.js';
 import { connectDB, closeDB } from './config/database.js';
 import {
@@ -107,6 +108,23 @@ app.use((err, req, res, next) => {
     });
   }
   next(err);
+});
+
+app.use((req, res, next) => {
+  const errors = [
+    ...validateInputPayload(req.body, 'body'),
+    ...validateInputPayload(req.query, 'query'),
+    ...validateInputPayload(req.params, 'params'),
+  ];
+  if (errors.length) {
+    return res.status(400).json({
+      success: false,
+      code: 'STU-INPUT-001',
+      message: 'Request contains unsupported input.',
+      errors,
+    });
+  }
+  next();
 });
 
 // Request and response logger (no user input or path params logged)

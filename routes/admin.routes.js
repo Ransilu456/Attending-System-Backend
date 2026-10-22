@@ -4,7 +4,7 @@ import { protect, isAdmin } from '../middleware/authMiddleware.js';
 import {
   validateAdminInput, validateStudentInput, validateStudentUpdateInput,
   validateLoginInput, validatePasswordUpdate, validateForgotPassword,
-  validateResetPassword, validateMongoId
+  validateResetPassword, validateMongoId, validateAdminProfileInput
 } from '../middleware/validationMiddleware.js';
 import {
   registerAdmin,
@@ -62,7 +62,7 @@ router.post('/logout', logoutAdmin);
 router.post('/forgot-password', validateForgotPassword, forgotPassword);
 router.post('/reset-password/:token', validateResetPassword, resetPassword);
 router.post('/update-password', protect, validatePasswordUpdate, updatePassword);
-router.patch('/profile', protect, updateProfile);
+router.patch('/profile', protect, validateAdminProfileInput, updateProfile);
 router.get('/me', protect, getAdminDetails);
 
 // Student management routes (admin protected)

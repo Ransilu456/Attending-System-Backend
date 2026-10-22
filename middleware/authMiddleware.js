@@ -30,7 +30,7 @@ export const protect = async (req, res, next) => {
  
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     if (mongoose.connection.readyState !== 1) {
-      return next(new AppError('MongoDB is unavailable. Please retry when the teacher server is online.', 503));
+      return next(new AppError('The service is temporarily unavailable. Please try again later.', 503));
     }
 
     const admin = await Admin.findById(decoded.id);
@@ -54,7 +54,7 @@ export const protect = async (req, res, next) => {
     next();
   } catch (error) {
     if (isMongoUnavailable(error)) {
-      return next(new AppError('MongoDB is unavailable. Please retry when the teacher server is online.', 503));
+      return next(new AppError('The service is temporarily unavailable. Please try again later.', 503));
     }
     next(new AppError('Invalid or expired token. Please log in again.', 401));
   }
@@ -103,7 +103,7 @@ export const verifyStudent = async (req, res, next) => {
     next();
   } catch (error) {
     if (isMongoUnavailable(error)) {
-      return next(new AppError('MongoDB is unavailable. Please retry when the teacher server is online.', 503));
+      return next(new AppError('The service is temporarily unavailable. Please try again later.', 503));
     }
     clearStudentSessionCookie(res);
     next(new AppError('Invalid or expired token. Please log in again.', 401));
@@ -132,7 +132,7 @@ export const verifyFirebaseStudentToken = async (req, res, next) => {
       return next();
     } catch (error) {
       if (isMongoUnavailable(error)) {
-        return next(new AppError('MongoDB is unavailable. Please retry when the teacher server is online.', 503));
+        return next(new AppError('The service is temporarily unavailable. Please try again later.', 503));
       }
       clearStudentSessionCookie(res);
       return next(new AppError('Invalid or expired student session.', 401));
