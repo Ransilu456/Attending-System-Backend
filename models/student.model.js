@@ -115,6 +115,14 @@ const studentSchema = new mongoose.Schema({
     default: 0,
     min: [0, 'Expected attendance sessions cannot be negative']
   },
+  attendanceMonthlyDistribution: [{
+    _id: false,
+    key: String,
+    label: String,
+    attended: Number,
+    total: Number,
+    pct: Number
+  }],
   attendanceHistory: [{
     date: { 
       type: Date, 

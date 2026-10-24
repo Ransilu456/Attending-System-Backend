@@ -52,9 +52,11 @@ student document.
 After MongoDB connects, startup reconciliation runs in this order:
 
 1. Drain pending Firebase profile-edit requests in batches of 50. Each edit is
-   revalidated and applied to MongoDB only if its `updatedAt` still matches the
-   version the student edited. Invalid, stale, or deleted-record requests are
-   marked rejected/conflicted.
+   revalidated and applied to MongoDB if its `updatedAt` still matches the
+   version the student edited. If unrelated MongoDB changes made that version
+   stale, the backend compares each requested field with the Firestore mirror
+   and safely rebases the edit only when none of those fields changed. Invalid,
+   conflicting, or deleted-record requests are marked rejected/conflicted.
 2. Scan MongoDB students and reconcile each full student document to Firebase.
    This updates Firestore with the authoritative MongoDB attendance history,
    `lastAttendance`, and current profile fields. The existing mirror excludes
@@ -71,11 +73,12 @@ attendance processing does not run a second full mirror during startup; the
 server's ordered reconciliation owns the initial profile-edit drain and mirror.
 
 Thus queued profile edits are accepted into MongoDB before the Firebase mirror
-replaces Firestore's student document. For conflicts, MongoDB wins except for
-validated profile-edit requests that pass the compare-and-set check. Students
-cannot write attendance or last-attendance data under the published Firestore
-rules. Notification history is not currently retained in the student portal;
-the legacy `messages` array is intentionally not mirrored.
+replaces Firestore's student document. Both current-version edits and safely
+rebased edits use a MongoDB compare-and-set, so concurrent changes to edited
+fields are not overwritten. Students cannot write attendance or last-attendance
+data under the published Firestore rules. Notification history is not currently
+retained in the student portal; the legacy `messages` array is intentionally
+not mirrored.
 
 If startup reconciliation fails, the backend logs the error and retries. When
 the configured daily Firebase quota is reached, it waits for the next UTC day

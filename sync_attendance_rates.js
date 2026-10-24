@@ -10,7 +10,7 @@ export async function syncAllStudentAttendanceRates() {
     const sessionDates = await getSystemSessionDates();
     console.log(`Loaded ${sessionDates.size} total system session dates.`);
 
-    const students = await Student.find({}, 'name indexNumber createdAt attendanceHistory attendancePercentage attendanceCount attendanceExpectedSessions status');
+    const students = await Student.find({}, 'name indexNumber createdAt attendanceHistory attendancePercentage attendanceCount attendanceExpectedSessions attendanceMonthlyDistribution status');
     console.log(`Processing ${students.length} students...`);
 
     let updatedCount = 0;
@@ -29,7 +29,8 @@ export async function syncAllStudentAttendanceRates() {
             $set: {
               attendancePercentage: newPct,
               attendanceCount: newCount,
-              attendanceExpectedSessions: expectedSessions
+              attendanceExpectedSessions: expectedSessions,
+              attendanceMonthlyDistribution: stats.monthlyDistribution
             }
           }
         }

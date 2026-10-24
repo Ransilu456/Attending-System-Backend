@@ -59,8 +59,10 @@ startup, the backend:
    and deletes into Firestore, and polls for new profile-edit requests.
 
 Profile edits made by a student are requests, not direct edits to the mirrored
-student document. The backend checks the request's allowed fields and its
-`updatedAt` version before applying it to MongoDB. Attendance and last
+student document. The backend checks the request's allowed fields and its `updatedAt` version
+before applying it to MongoDB. If unrelated MongoDB changes make that version
+stale, the backend checks the requested fields against the Firestore mirror and
+rebases the edit only when those fields have not changed. Attendance and last
 attendance are teacher/backend-managed and flow from MongoDB to Firestore.
 Legacy `messages`/notification history is not currently mirrored.
 

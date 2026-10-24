@@ -14,6 +14,26 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const NAME_PATTERN = /^[\p{L}\p{M}\s'.,-]+$/u;
 const PHONE_PATTERN = /^\+?\d{10,15}$/;
 
+const comparableValue = (value) => {
+  if (value instanceof Date) return { date: value.getTime() };
+  if (value && typeof value.toDate === 'function') {
+    return { date: value.toDate().getTime() };
+  }
+  if (Array.isArray(value)) return value.map(comparableValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.keys(value).sort().map((key) => [key, comparableValue(value[key])])
+    );
+  }
+  return value;
+};
+
+export const hasProfileEditConflict = (updates, currentStudent, mirroredStudent) =>
+  Object.keys(updates).some((field) =>
+    JSON.stringify(comparableValue(currentStudent[field])) !==
+    JSON.stringify(comparableValue(mirroredStudent[field]))
+  );
+
 export const normalizeStudentProfileUpdates = (input) => {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return { error: 'Profile changes must be an object.' };

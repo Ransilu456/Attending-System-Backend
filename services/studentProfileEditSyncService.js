@@ -1,8 +1,15 @@
 import mongoose from 'mongoose';
 import Student from '../models/student.model.js';
 import { getFirebaseAdmin } from '../config/firebase.js';
-import { runFirebaseRead, runFirebaseWrite } from './firebaseQuotaService.js';
-import { normalizeStudentProfileUpdates } from '../utils/studentProfileEdits.js';
+import {
+  readStudentDocument,
+  runFirebaseRead,
+  runFirebaseWrite,
+} from './firebaseQuotaService.js';
+import {
+  hasProfileEditConflict,
+  normalizeStudentProfileUpdates,
+} from '../utils/studentProfileEdits.js';
 import { logError, logInfo } from '../utils/terminal.js';
 
 const POLL_INTERVAL_MS = 30_000;
@@ -44,7 +51,10 @@ const processEditRequest = async (snapshot) => {
     return;
   }
 
-  const currentStudent = await Student.findById(studentId).select('_id updatedAt').lean();
+  const selectedFields = Object.keys(normalized.updates).join(' ');
+  const currentStudent = await Student.findById(studentId)
+    .select(`_id updatedAt ${selectedFields}`)
+    .lean();
   if (!currentStudent) {
     await setRequestStatus(requestRef, 'rejected', 'Student record no longer exists.');
     return;
@@ -61,17 +71,24 @@ const processEditRequest = async (snapshot) => {
   }
 
   if (!currentStudent.updatedAt || currentStudent.updatedAt.getTime() !== baseUpdatedAt.getTime()) {
-    await setRequestStatus(
-      requestRef,
-      'conflict',
-      'The profile changed on the teacher server. Reload the profile and submit your edits again.'
-    );
-    return;
+    const mirroredStudent = await readStudentDocument(studentId, { forceRefresh: true });
+    if (!mirroredStudent || hasProfileEditConflict(
+      normalized.updates,
+      currentStudent,
+      mirroredStudent,
+    )) {
+      await setRequestStatus(
+        requestRef,
+        'conflict',
+        'The profile changed on the teacher server. Reload the profile and submit your edits again.'
+      );
+      return;
+    }
   }
 
   try {
     const updatedStudent = await Student.findOneAndUpdate(
-      { _id: studentId, updatedAt: baseUpdatedAt },
+      { _id: studentId, updatedAt: currentStudent.updatedAt },
       { $set: normalized.updates },
       { new: true, runValidators: true },
     ).select('_id');
