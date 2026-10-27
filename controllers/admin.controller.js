@@ -8,6 +8,7 @@ import { DateTime } from 'luxon';
 import { generateQRCode } from '../utils/qrGenerator.js';
 import { mongoIdToNumericCode } from '../utils/idConverter.js';
 import { maskId, resolveId } from '../utils/idMask.js';
+import { mirrorStudentAfterWrite } from '../services/firebaseMirrorService.js';
 
 dotenv.config();
 
@@ -201,9 +202,12 @@ export const updateStudent = async (req, res) => {
       return res.status(404).json({ message: 'Student not found' });
     }
 
+    const firebaseSynced = await mirrorStudentAfterWrite(student._id, 'admin profile update');
+
     res.status(200).json({
       message: 'Student updated successfully',
-      student: { ...student.toObject(), _id: maskId(student._id) }
+      student: { ...student.toObject(), _id: maskId(student._id) },
+      firebaseSynced,
     });
   } catch {
     res.status(500).json({ message: 'Error updating student' });

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  hasProfileEditConflict,
+  isProfileEditVersionCurrent,
   normalizeStudentProfileUpdates,
   STUDENT_PROFILE_EDIT_FIELDS,
 } from '../utils/studentProfileEdits.js';
@@ -39,30 +39,20 @@ test('normalizes valid profile edits before saving them to MongoDB', () => {
   assert.equal(result.updates.profileImage, null);
 });
 
-test('allows stale profile edits when their target fields still match the Firebase mirror', () => {
-  const currentStudent = {
-    profileImage: 'data:image/jpeg;base64,current',
-    dateOfBirth: new Date('2008-04-05T00:00:00.000Z'),
-  };
-  const mirroredStudent = {
-    profileImage: 'data:image/jpeg;base64,current',
-    dateOfBirth: { toDate: () => new Date('2008-04-05T00:00:00.000Z') },
-  };
-
-  assert.equal(hasProfileEditConflict({
-    profileImage: 'data:image/jpeg;base64,next',
-  }, currentStudent, mirroredStudent), false);
-  assert.equal(hasProfileEditConflict({
-    dateOfBirth: new Date('2009-04-05T00:00:00.000Z'),
-  }, currentStudent, mirroredStudent), false);
+test('accepts edits only when MongoDB still has the profile version loaded by the student', () => {
+  const baseUpdatedAt = new Date('2026-10-01T10:00:00.000Z');
+  assert.equal(isProfileEditVersionCurrent(
+    baseUpdatedAt,
+    { toDate: () => new Date(baseUpdatedAt) },
+  ), true);
 });
 
-test('detects a stale profile edit when its target field changed in MongoDB', () => {
-  assert.equal(hasProfileEditConflict(
-    { profileImage: 'data:image/jpeg;base64,next' },
-    { profileImage: 'data:image/jpeg;base64,teacher-change' },
-    { profileImage: 'data:image/jpeg;base64,original' },
-  ), true);
+test('rejects a stale Firebase edit after an admin change was mirrored to MongoDB', () => {
+  assert.equal(isProfileEditVersionCurrent(
+    new Date('2026-10-01T10:00:00.000Z'),
+    new Date('2026-10-01T10:05:00.000Z'),
+  ), false);
+  assert.equal(isProfileEditVersionCurrent(null, new Date()), false);
 });
 
 test('rejects attempts to modify identity, status, attendance, or unknown fields', () => {

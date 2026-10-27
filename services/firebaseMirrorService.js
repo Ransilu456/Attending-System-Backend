@@ -144,6 +144,18 @@ export const mirrorStudent = async (student) => {
   }
 };
 
+export const mirrorStudentAfterWrite = async (studentId, source) => {
+  try {
+    const student = await Student.findById(studentId).lean();
+    if (!student) return false;
+    await mirrorStudent(student);
+    return true;
+  } catch (error) {
+    logError(`MongoDB ${source} for student ${studentId} is saved, but Firebase mirroring failed: ${error.message}`);
+    return false;
+  }
+};
+
 export const syncAllStudentsToFirebase = async ({ failOnSkipped = true } = {}) => {
   if (!getFirebaseAdmin()) throw new Error('Firebase Admin is not configured.');
 

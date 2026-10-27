@@ -7,6 +7,7 @@ import { isMongoUnavailable } from '../utils/dbAvailability.js';
 import { getFirebaseAdmin } from '../config/firebase.js';
 import { readStudentDocument } from '../services/firebaseQuotaService.js';
 import StudentSession from '../models/studentSession.model.js';
+import { mirrorStudentAfterWrite } from '../services/firebaseMirrorService.js';
 import {
   clearStudentSessionCookie,
   createStudentSessionToken,
@@ -204,9 +205,12 @@ export const updateStudentProfile = async (req, res) => {
       return res.status(404).json({ message: 'Student not found' });
     }
 
+    const firebaseSynced = await mirrorStudentAfterWrite(student._id, 'admin profile update');
+
     res.status(200).json({
       message: 'Student profile updated successfully',
-      student: { ...student.toObject(), _id: maskId(student._id), id: maskId(student._id) }
+      student: { ...student.toObject(), _id: maskId(student._id), id: maskId(student._id) },
+      firebaseSynced,
     });
   } catch (error) {
     if (error.name === 'ValidationError') {
@@ -518,9 +522,12 @@ export const updateMyProfile = async (req, res) => {
       return res.status(404).json({ message: 'Student not found' });
     }
 
+    const firebaseSynced = await mirrorStudentAfterWrite(student._id, 'student profile update');
+
     res.status(200).json({
       message: 'Profile updated successfully',
       student: { ...student.toObject(), _id: maskId(student._id), id: maskId(student._id) },
+      firebaseSynced,
     });
   } catch (error) {
     if (error.name === 'ValidationError') {

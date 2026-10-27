@@ -2,12 +2,12 @@ import mongoose from 'mongoose';
 import Student from '../models/student.model.js';
 import { getFirebaseAdmin } from '../config/firebase.js';
 import {
-  readStudentDocument,
   runFirebaseRead,
   runFirebaseWrite,
 } from './firebaseQuotaService.js';
+import { mirrorStudent } from './firebaseMirrorService.js';
 import {
-  hasProfileEditConflict,
+  isProfileEditVersionCurrent,
   normalizeStudentProfileUpdates,
 } from '../utils/studentProfileEdits.js';
 import { logError, logInfo } from '../utils/terminal.js';
@@ -64,26 +64,20 @@ const processEditRequest = async (snapshot) => {
     _id: studentId,
     updatedAt: { $ne: baseUpdatedAt },
     ...normalized.updates,
-  }).select('_id').lean();
+  }).lean();
   if (updatesAlreadyApplied) {
+    await mirrorStudent(updatesAlreadyApplied);
     await setRequestStatus(requestRef, 'synced');
     return;
   }
 
-  if (!currentStudent.updatedAt || currentStudent.updatedAt.getTime() !== baseUpdatedAt.getTime()) {
-    const mirroredStudent = await readStudentDocument(studentId, { forceRefresh: true });
-    if (!mirroredStudent || hasProfileEditConflict(
-      normalized.updates,
-      currentStudent,
-      mirroredStudent,
-    )) {
-      await setRequestStatus(
-        requestRef,
-        'conflict',
-        'The profile changed on the teacher server. Reload the profile and submit your edits again.'
-      );
-      return;
-    }
+  if (!isProfileEditVersionCurrent(baseUpdatedAt, currentStudent.updatedAt)) {
+    await setRequestStatus(
+      requestRef,
+      'conflict',
+      'The profile changed on the teacher server. Reload the profile and submit your edits again.'
+    );
+    return;
   }
 
   try {
@@ -91,7 +85,7 @@ const processEditRequest = async (snapshot) => {
       { _id: studentId, updatedAt: currentStudent.updatedAt },
       { $set: normalized.updates },
       { new: true, runValidators: true },
-    ).select('_id');
+    ).lean();
 
     if (!updatedStudent) {
       await setRequestStatus(
@@ -101,6 +95,7 @@ const processEditRequest = async (snapshot) => {
       );
       return;
     }
+    await mirrorStudent(updatedStudent);
   } catch (error) {
     if (error.name === 'ValidationError' || error.code === 11000) {
       await setRequestStatus(requestRef, 'rejected', 'The profile changes are invalid or conflict with another student.');
@@ -145,16 +140,14 @@ const syncPendingEdits = async () => {
   }
 };
 
-const runSyncLoop = async () => {
+const runSyncLoop = () => {
   if (syncTask) return syncTask;
-  syncTask = syncPendingEdits()
-    .catch((error) => logError(`Offline student profile sync failed: ${error.message}`))
-    .finally(() => { syncTask = null; });
+  syncTask = syncPendingEdits().finally(() => { syncTask = null; });
   return syncTask;
 };
 
 export const syncPendingStudentProfileEdits = async () => {
-  await syncPendingEdits();
+  await runSyncLoop();
 };
 
 export const startStudentProfileEditSync = () => {
@@ -165,9 +158,9 @@ export const startStudentProfileEditSync = () => {
   }
 
   stopped = false;
-  void runSyncLoop();
+  void runSyncLoop().catch((error) => logError(`Offline student profile sync failed: ${error.message}`));
   syncTimer = setInterval(() => {
-    void runSyncLoop();
+    void runSyncLoop().catch((error) => logError(`Offline student profile sync failed: ${error.message}`));
   }, POLL_INTERVAL_MS);
   syncTimer.unref?.();
   logInfo('Offline student profile sync is watching Firebase requests for MongoDB.');

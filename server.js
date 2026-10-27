@@ -183,13 +183,13 @@ const reconcileFirebaseOnStartup = async () => {
   }
 
   try {
+    startStudentMirror();
+    startStudentProfileEditSync();
     await syncPendingStudentProfileEdits();
     const result = await syncAllStudentsToFirebase({ failOnSkipped: false });
     if (result.skipped) {
       logWarning(`Startup reconciliation skipped ${result.skipped} invalid student record(s); review the errors above.`);
     }
-    startStudentMirror();
-    startStudentProfileEditSync();
     firebaseReconciliationStarted = true;
   } catch (error) {
     logError(`Firebase startup reconciliation failed: ${error.message}`);

@@ -12,7 +12,7 @@ npm start
 npm test
 ```
 
-`npm run dev` starts the server with Nodemon. Set the database, JWT, Firebase, CORS, and quota variables in `.env` using `.env.example` as the template. Keep service-account keys and `.env` files private. See the repository [Firebase setup guide](../../FIREBASE-SETUP.md) for Firebase project setup and student migration.
+`npm run dev` starts the server with Nodemon, watching Node.js source files only. Runtime Firebase quota and change-stream state are JSON files, so they are intentionally excluded from the restart cycle. Set the database, JWT, Firebase, CORS, and quota variables in `.env` using `.env.example` as the template. Keep service-account keys and `.env` files private. See the repository [Firebase setup guide](../../FIREBASE-SETUP.md) for Firebase project setup and student migration.
 
 The Postman collection is in [`postman/`](../postman/). Import both the collection and its environment, use a disposable/test database, run **Fetch CSRF token** before state-changing calls, and supply valid IDs and credentials only in a private local environment. Delete and attendance-changing requests are disabled by default. The environment template intentionally contains no credentials or tokens.
 
