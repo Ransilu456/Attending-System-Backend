@@ -170,7 +170,7 @@ You’re not free to use, modify, and distribute — with attribution.
 
 ## Firebase student fallback and MongoDB mirror
 
-For full frontend/backend setup, environment files, Firebase student authentication, Sinhala support, and sync details, see [STUDENT-AUTHENTICATION-AND-SYNC.md](./docs/STUDENT-AUTHENTICATION-AND-SYNC.md), [How MongoDB and Firebase communicate](./docs/DATABASE-COMMUNICATION.md), and the [Firebase + MongoDB Setup guide](../FIREBASE-SETUP.md).
+For Firebase student authentication, Sinhala support, and synchronization details, see [STUDENT-AUTHENTICATION-AND-SYNC.md](./docs/STUDENT-AUTHENTICATION-AND-SYNC.md) and [How MongoDB and Firebase communicate](./docs/DATABASE-COMMUNICATION.md). The frontend is maintained and deployed from its separate repository.
 
 Only student records are copied from MongoDB into Firebase; admin documents, credentials, and admin routes are not migrated or hosted in Firebase. The teacher's MongoDB remains authoritative for teacher-managed student and attendance writes. Students sign in directly with Firebase email/password and read their own Firestore mirror without the teacher API. Firebase Auth uses SDK-managed browser-local persistence. The backend synchronizes MongoDB changes into Firestore and applies validated queued profile edits when it is online.
 
@@ -181,7 +181,7 @@ Firestore operations made by this backend are capped at 40,000 reads and 18,000 
 ### Configure Firebase
 
 1. Create a Firebase project and enable **Authentication → Email/Password** and **Cloud Firestore**.
-2. From the repository root, deploy the Firestore rules and required profile-edit index with `firebase deploy --only firestore:rules,firestore:indexes --project <your-project-id>`. The root [`firebase.json`](../firebase.json) points to [`firestore.rules`](./firestore.rules) and [`firestore.indexes.json`](./firestore.indexes.json). Startup applies pending student profile edits before mirroring MongoDB records; the `requests.status` collection-group index is required for that queue query.
+2. From the backend repository root, deploy the Firestore rules and required profile-edit index with `firebase deploy --only firestore:rules,firestore:indexes --project <your-project-id>`. The local [`firebase.json`](./firebase.json) points to [`firestore.rules`](./firestore.rules) and [`firestore.indexes.json`](./firestore.indexes.json). Startup applies pending student profile edits before mirroring MongoDB records; the `requests.status` collection-group index is required for that queue query.
 3. Create a service-account key for the backend. Keep it private and out of source control.
 4. Configure the backend environment:
 

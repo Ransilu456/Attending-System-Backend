@@ -88,7 +88,7 @@ installation with neither file is expected: quota counters start at zero, and
 the change stream starts without a saved resume token after the startup
 reconciliation. Keep the generated files on the backend machine between
 restarts; do not commit, share, or copy them as configuration. They are ignored
-by `Backend/.gitignore`.
+by the backend repository's `.gitignore`.
 
 Set the variables only if you want to put runtime state somewhere else, such
 as a persistent data directory:
@@ -135,7 +135,7 @@ health check does not verify Firebase Authentication or Firestore rules.
 
 See [Student authentication and synchronization](./STUDENT-AUTHENTICATION-AND-SYNC.md)
 for password setup, Firebase session behavior, endpoints, and deployment
-requirements. Student portal error codes are documented in the frontend
-[error-code catalog](../../Frontend/frontend/docs/STUDENT-PORTAL-ERROR-CODES.md).
-See [Firebase setup](../../FIREBASE-SETUP.md) for credential setup and
-migration instructions.
+requirements. Student portal error codes are documented in the frontend repository's
+`docs/STUDENT-PORTAL-ERROR-CODES.md`. See the Firebase setup section in the
+backend [README](../README.md#firebase-student-fallback-and-mongodb-mirror) for
+credential setup and migration instructions.

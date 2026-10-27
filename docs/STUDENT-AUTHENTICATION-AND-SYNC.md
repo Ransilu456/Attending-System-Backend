@@ -118,7 +118,7 @@ Student login, password setup, and the student navigation support English and
 Sinhala. The preference is saved as the non-sensitive `student_language` value
 in localStorage and defaults to Sinhala. It is separate from authentication
 credentials. Add or revise labels in
-`Frontend/frontend/src/i18n/studentLanguage.js`; Sinhala text uses Unicode and
+the frontend's `src/i18n/studentLanguage.js`; Sinhala text uses Unicode and
 the system font fallback includes Noto Sans Sinhala / Iskoola Pota. Analytics
 and detailed tab copy may still contain English text.
 
@@ -135,8 +135,8 @@ and detailed tab copy may still contain English text.
 
 ## Verification
 
-From `Backend`, run `npm test`. From `Frontend/frontend`, run
-`npm test -- --run` and `npm run build`. Test Firebase email/password sign-in,
+From the backend repository root, run `npm test`. From the separate frontend
+repository root, run `npm test` and `npm run build`. Test Firebase email/password sign-in,
 browser reload restoration, sign-out, inactive students, Firestore owner-only
 rules, a stale profile-edit request, and startup synchronization with test
 data before deploying. Student portal authentication and data reads should
