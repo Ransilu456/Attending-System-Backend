@@ -8,7 +8,7 @@ import { DateTime } from 'luxon';
 import { generateQRCode } from '../utils/qrGenerator.js';
 import { mongoIdToNumericCode } from '../utils/idConverter.js';
 import { maskId, resolveId } from '../utils/idMask.js';
-import { mirrorStudentAfterWrite } from '../services/firebaseMirrorService.js';
+import { mirrorStudentAfterWrite } from '../integrations/firebase/student/firebaseMirrorService.js';
 
 dotenv.config();
 
@@ -56,7 +56,6 @@ export const loginAdmin = async (req, res) => {
       return res.status(401).json({ message: 'Account is inactive. Please contact support.' });
     }
 
-    // Check if account is temporarily locked due to previous failed attempts
     if (admin.accountLockedUntil && admin.accountLockedUntil > Date.now()) {
       return res.status(401).json({ message: 'Account is temporarily locked. Please try again later.' });
     }
@@ -566,7 +565,7 @@ export const getRecentAttendance = async (req, res) => {
           messageStatus: student.lastMessage?.[0]?.status || null
         };
       })
-      // Only show students who actually scanned today (entered, present, left) - never absent in scanned table
+      // Only show students who actually scanned today 
       .filter(r => ['entered', 'present', 'left'].includes(r.status));
 
     const sortedRecords = processedRecords.sort((a, b) => {
@@ -575,19 +574,19 @@ export const getRecentAttendance = async (req, res) => {
       return new Date(timeB) - new Date(timeA);
     });
 
-    const totalActiveStudents = await Student.countDocuments({ status: 'active' });
+    const totalStudents = await Student.countDocuments();
     const inClassCount = sortedRecords.filter(r => r.status === 'entered' || r.status === 'present').length;
     const leftClassCount = sortedRecords.filter(r => r.status === 'left').length;
     const totalScannedToday = inClassCount + leftClassCount;
-    const absentTodayCount = Math.max(0, totalActiveStudents - totalScannedToday);
+    const absentTodayCount = Math.max(0, totalStudents - totalScannedToday);
 
     const stats = {
-      totalCount: totalActiveStudents,
-      totalStudents: totalActiveStudents,
+      totalCount: totalStudents,
+      totalStudents: totalStudents,
       totalScanned: totalScannedToday,
-      presentCount: inClassCount,     // In Class
-      leftCount: leftClassCount,       // Left Class
-      absentCount: absentTodayCount    // Absent (not checked in today)
+      presentCount: inClassCount,     // In 
+      leftCount: leftClassCount,       // Left 
+      absentCount: absentTodayCount    // Absent 
     };
 
     res.status(200).json({

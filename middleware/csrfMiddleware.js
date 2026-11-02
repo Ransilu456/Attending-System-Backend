@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import mongoose from 'mongoose';
 import CsrfToken from '../models/csrfToken.model.js';
-import { logWarning } from '../utils/terminal.js';
+import { logWarning } from '../utils/logging/terminal.js';
 import { isMongoUnavailable } from '../utils/dbAvailability.js';
 
 // In-memory blocked IPs: { ip -> unblockAt }

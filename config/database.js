@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { logInfo, logSuccess, logError, logWarning } from '../utils/terminal.js';
+import { logInfo, logSuccess, logError, logWarning } from '../utils/logging/terminal.js';
 
 const MAX_RETRIES = 3;
 let retryCount = 0;

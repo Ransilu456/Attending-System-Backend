@@ -1,8 +1,8 @@
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import Student from '../../models/student.model.js';
-import { getFirebaseAdmin } from '../../config/firebase.js';
-import { mirrorStudent } from '../../services/firebaseMirrorService.js';
+import { getFirebaseAdmin } from '../../integrations/firebase/firebaseAdmin.js';
+import { mirrorStudent } from '../../integrations/firebase/student/firebaseMirrorService.js';
 
 dotenv.config();
 

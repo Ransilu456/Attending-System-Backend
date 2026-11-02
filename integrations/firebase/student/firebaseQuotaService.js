@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { getFirebaseAdmin } from '../config/firebase.js';
+import { getFirebaseAdmin } from '../firebaseAdmin.js';
 
 const DEFAULT_DAILY_READ_LIMIT = 40000;
 const DEFAULT_DAILY_WRITE_LIMIT = 18000;
@@ -17,7 +17,7 @@ const pendingStudentReads = new Map();
 
 const getUsagePath = () => process.env.FIREBASE_QUOTA_USAGE_PATH
   ? path.resolve(process.env.FIREBASE_QUOTA_USAGE_PATH)
-  : path.join(process.cwd(), '.firebase-quota-usage.json');
+  : path.join(process.cwd(), 'data', 'firebase-quota-usage.json');
 
 const getDailyLimit = (operation) => {
   const envName = operation === 'read'

@@ -1,4 +1,4 @@
-import { logInfo, logWarning, logError } from '../utils/terminal.js';
+import { logInfo, logWarning, logError } from '../utils/logging/terminal.js';
 import Student from '../models/student.model.js';
 
 // Automatically mark exit attendance for all active visits today

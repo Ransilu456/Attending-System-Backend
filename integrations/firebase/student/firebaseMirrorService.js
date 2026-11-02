@@ -1,18 +1,18 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import mongoose from 'mongoose';
-import Student from '../models/student.model.js';
-import { getFirebaseAdmin } from '../config/firebase.js';
+import Student from '../../../models/student.model.js';
+import { getFirebaseAdmin } from '../firebaseAdmin.js';
 import {
   deleteStudentDocument,
   readStudentDocument,
   writeStudentDocument,
 } from './firebaseQuotaService.js';
-import { logError, logInfo, logWarning } from '../utils/terminal.js';
+import { logError, logInfo, logWarning } from '../../../utils/logging/terminal.js';
 
 const getResumeTokenPath = () => process.env.FIREBASE_SYNC_TOKEN_PATH
   ? path.resolve(process.env.FIREBASE_SYNC_TOKEN_PATH)
-  : path.join(process.cwd(), '.firebase-sync-token.json');
+  : path.join(process.cwd(), 'data', 'firebase-sync-token.json');
 
 let mirrorTask;
 let activeStream;
@@ -59,6 +59,7 @@ const getStudentData = (student) => {
   delete data.messages;
   delete data.notifications;
   delete data.notificationHistory;
+  data.profileImage = data.profileImage?.trim() || null;
   data._id = String(student._id);
   if (Buffer.byteLength(JSON.stringify(data)) > 900 * 1024) {
     throw permanentMirrorError(`Student ${data._id} exceeds the supported Firestore document size; split attendance history before mirroring.`);

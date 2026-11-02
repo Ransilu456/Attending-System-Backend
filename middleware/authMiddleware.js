@@ -4,7 +4,7 @@ import Admin from '../models/admin.model.js';
 import Student from '../models/student.model.js';
 import AppError from '../utils/appError.js';
 import { isMongoUnavailable } from '../utils/dbAvailability.js';
-import { getFirebaseAdmin } from '../config/firebase.js';
+import { getFirebaseAdmin } from '../integrations/firebase/firebaseAdmin.js';
 import StudentSession from '../models/studentSession.model.js';
 import {
   clearStudentSessionCookie,

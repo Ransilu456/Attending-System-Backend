@@ -2,7 +2,7 @@ import Student from '../models/student.model.js';
 import { DateTime } from 'luxon';
 import mongoose from 'mongoose';
 import { maskId, resolveId } from '../utils/idMask.js';
-import { getSystemSessionDates, calculateStudentAttendanceStats, invalidateSessionDatesCache } from '../utils/attendanceStats.js';
+import { getSystemSessionDates, calculateStudentAttendanceStats, invalidateSessionDatesCache } from '../utils/attendance/attendanceStats.js';
 
 // In-memory configuration store for automatic checkout task
 let autoCheckoutSettings = {

@@ -1,4 +1,4 @@
-import { logInfo, logError } from '../utils/terminal.js';
+import { logInfo, logError } from '../utils/logging/terminal.js';
 import { autoMarkLeaveAttendance, checkAllPastAttendance, updateStudentStatuses } from './autoAttendanceService.js';
 import { syncAllStudentAttendanceRates } from '../sync_attendance_rates.js';
 

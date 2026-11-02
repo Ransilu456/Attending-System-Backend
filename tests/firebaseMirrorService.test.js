@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { consumeChangeStream } from '../services/firebaseMirrorService.js';
+import { consumeChangeStream } from '../integrations/firebase/student/firebaseMirrorService.js';
 
 test('consumes MongoDB change streams through next() in order', async () => {
   const changes = [{ id: 1 }, { id: 2 }];

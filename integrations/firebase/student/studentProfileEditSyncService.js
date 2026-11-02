@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
-import Student from '../models/student.model.js';
-import { getFirebaseAdmin } from '../config/firebase.js';
+import Student from '../../../models/student.model.js';
+import { getFirebaseAdmin } from '../firebaseAdmin.js';
 import {
   runFirebaseRead,
   runFirebaseWrite,
@@ -9,8 +9,8 @@ import { mirrorStudent } from './firebaseMirrorService.js';
 import {
   isProfileEditVersionCurrent,
   normalizeStudentProfileUpdates,
-} from '../utils/studentProfileEdits.js';
-import { logError, logInfo } from '../utils/terminal.js';
+} from '../../../utils/studentProfileEdits.js';
+import { logError, logInfo } from '../../../utils/logging/terminal.js';
 
 const POLL_INTERVAL_MS = 30_000;
 const BATCH_SIZE = 50;

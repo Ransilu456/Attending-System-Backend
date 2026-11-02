@@ -93,7 +93,11 @@ const studentSchema = new mongoose.Schema({
   profileImage: {
     type: String,
     default: null,
-    validate: safeTextValidator,
+    set: value => value?.trim() || null,
+    validate: {
+      validator: value => value == null || isSafeUserText(value),
+      message: 'Profile image contains unsupported characters or executable markup.',
+    },
   },
   qrCode: {
     type: String,

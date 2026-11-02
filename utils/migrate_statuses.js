@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import Student from '../models/student.model.js';
 import { connectDB } from '../config/database.js';
-import { logInfo, logError, logSuccess } from '../utils/terminal.js';
+import { logInfo, logError, logSuccess } from './logging/terminal.js';
 
 dotenv.config();
 

@@ -2,12 +2,12 @@ import Student from '../models/student.model.js';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import { maskId, resolveId } from '../utils/idMask.js';
-import { getSystemSessionDates, calculateStudentAttendanceStats } from '../utils/attendanceStats.js';
+import { getSystemSessionDates, calculateStudentAttendanceStats } from '../utils/attendance/attendanceStats.js';
 import { isMongoUnavailable } from '../utils/dbAvailability.js';
-import { getFirebaseAdmin } from '../config/firebase.js';
-import { readStudentDocument } from '../services/firebaseQuotaService.js';
+import { getFirebaseAdmin } from '../integrations/firebase/firebaseAdmin.js';
+import { readStudentDocument } from '../integrations/firebase/student/firebaseQuotaService.js';
 import StudentSession from '../models/studentSession.model.js';
-import { mirrorStudentAfterWrite } from '../services/firebaseMirrorService.js';
+import { mirrorStudentAfterWrite } from '../integrations/firebase/student/firebaseMirrorService.js';
 import {
   clearStudentSessionCookie,
   createStudentSessionToken,

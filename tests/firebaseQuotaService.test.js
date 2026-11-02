@@ -15,7 +15,7 @@ test('Firebase operation limits are concurrency-safe and persist across service 
   process.env.FIREBASE_DAILY_READ_LIMIT = '2';
   process.env.FIREBASE_DAILY_WRITE_LIMIT = '1';
 
-  const quota = await import(`../services/firebaseQuotaService.js?test=${randomUUID()}`);
+  const quota = await import(`../integrations/firebase/student/firebaseQuotaService.js?test=${randomUUID()}`);
   let readCalls = 0;
   await Promise.all([
     quota.runFirebaseRead(async () => { readCalls += 1; }),
@@ -34,7 +34,7 @@ test('Firebase operation limits are concurrency-safe and persist across service 
     { code: 'FIREBASE_DAILY_LIMIT', statusCode: 429 },
   );
 
-  const reloadedQuota = await import(`../services/firebaseQuotaService.js?test=${randomUUID()}`);
+  const reloadedQuota = await import(`../integrations/firebase/student/firebaseQuotaService.js?test=${randomUUID()}`);
   await assert.rejects(
     reloadedQuota.runFirebaseRead(async () => {}),
     { code: 'FIREBASE_DAILY_LIMIT', statusCode: 429 },
@@ -67,7 +67,7 @@ test('quota persistence retries transient Windows rename locks', async (t) => {
     return originalRename(...args);
   });
 
-  const quota = await import(`../services/firebaseQuotaService.js?test=${randomUUID()}`);
+  const quota = await import(`../integrations/firebase/student/firebaseQuotaService.js?test=${randomUUID()}`);
   await quota.runFirebaseRead(async () => 'read completed');
 
   assert.equal(attempts, 2);

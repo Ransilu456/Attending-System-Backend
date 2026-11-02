@@ -1,4 +1,4 @@
-import Student from '../models/student.model.js';
+import Student from '../../models/student.model.js';
 
 let cachedSessionDates = null;
 let lastCacheTime = 0;

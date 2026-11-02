@@ -12,6 +12,19 @@ npm start
 npm test
 ```
 
+### Desktop/Tauri sidecar
+
+The Node backend is designed to run as a localhost sidecar. Importing
+`bootstrap/startServer.js` does not start a listener; call `startServer()` and
+retain its returned server handle. Call `shutdown()` before the desktop process
+terminates.
+
+Use `HOST=127.0.0.1` and a fixed development port when testing the sidecar.
+The desktop application should package the backend directory, Node runtime or
+sidecar runtime, and a writable per-user `.env`; do not package the repository
+root, generated executables, `node_modules`, or build output into source
+updates. The normal `npm start` command remains for standalone development.
+
 `npm run dev` starts the server with Nodemon, watching Node.js source files only. Runtime Firebase quota and change-stream state are JSON files, so they are intentionally excluded from the restart cycle. Set the database, JWT, Firebase, CORS, and quota variables in `.env` using `.env.example` as the template. Keep service-account keys and `.env` files private. See the backend [README](../README.md#firebase-student-fallback-and-mongodb-mirror) for Firebase project setup and student migration.
 
 The Postman collection is in [`postman/`](../postman/). Import both the collection and its environment, use a disposable/test database, run **Fetch CSRF token** before state-changing calls, and supply valid IDs and credentials only in a private local environment. Delete and attendance-changing requests are disabled by default. The environment template intentionally contains no credentials or tokens.

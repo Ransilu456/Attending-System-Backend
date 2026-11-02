@@ -53,6 +53,9 @@ It features:
  ┃ ┗ 📜 terminal.js
  ┣ 📂 public/
  ┃ ┗ 📜 qr-codes/
+ ┣ 📂 bootstrap/
+ ┃ ┗ 📜 startServer.js
+ ┣ 📜 app.js
  ┣ 📜 server.js
  ┣ 📜 main.py
  ┣ 📜 launcher.cpp

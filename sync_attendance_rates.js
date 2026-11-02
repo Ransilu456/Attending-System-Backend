@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import Student from './models/student.model.js';
-import { getSystemSessionDates, calculateStudentAttendanceStats } from './utils/attendanceStats.js';
+import { getSystemSessionDates, calculateStudentAttendanceStats } from './utils/attendance/attendanceStats.js';
 
 dotenv.config();
 
