@@ -4,7 +4,13 @@ import { getFirestore } from 'firebase-admin/firestore';
 
 let services;
 
+export const isFirebaseEnabled = () => {
+  const setting = String(process.env.FIREBASE_WORK ?? process.env.firebase_work ?? '').trim().toLowerCase();
+  return setting === 'true' || setting === '1' || setting === 'yes' || setting === 'on';
+};
+
 export const getFirebaseAdmin = () => {
+  if (!isFirebaseEnabled()) return null;
   if (services) return services;
 
   const rawServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;

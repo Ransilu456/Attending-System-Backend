@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import mongoose from 'mongoose';
 import Student from '../../../models/student.model.js';
-import { getFirebaseAdmin } from '../firebaseAdmin.js';
+import { getFirebaseAdmin, isFirebaseEnabled } from '../firebaseAdmin.js';
 import {
   deleteStudentDocument,
   readStudentDocument,
@@ -146,6 +146,7 @@ export const mirrorStudent = async (student) => {
 };
 
 export const mirrorStudentAfterWrite = async (studentId, source) => {
+  if (!isFirebaseEnabled()) return false;
   try {
     const student = await Student.findById(studentId).lean();
     if (!student) return false;
@@ -214,6 +215,17 @@ const deleteStudentMirror = async (studentId) => {
   }
 };
 
+export const deleteStudentFromFirebase = async (studentId) => {
+  if (!isFirebaseEnabled()) return false;
+  try {
+    await deleteStudentMirror(String(studentId));
+    return true;
+  } catch (error) {
+    logWarning(`Firebase cleanup failed for deleted student ${studentId}: ${error.message}`);
+    return false;
+  }
+};
+
 const readResumeToken = async () => {
   try {
     return JSON.parse(await fs.readFile(getResumeTokenPath(), 'utf8'));
@@ -233,12 +245,28 @@ const saveResumeToken = async (token) => {
 
 const processChange = async (change) => {
   if (change.operationType === 'delete') {
-    await deleteStudentMirror(String(change.documentKey._id));
+    await deleteStudentFromFirebase(String(change.documentKey._id));
     return;
   }
 
+  if (!change.fullDocument && change.documentKey?._id) {
+    try {
+      const currentStudent = await Student.findById(change.documentKey._id).lean();
+      if (currentStudent) {
+        change.fullDocument = currentStudent;
+      }
+    } catch (error) {
+      logWarning(`Could not look up MongoDB student ${change.documentKey._id} for Firebase mirroring: ${error.message}`);
+    }
+  }
   if (!change.fullDocument) {
-    throw new Error(`MongoDB change ${change.operationType} did not include the updated student document.`);
+    if (change.documentKey?._id) {
+      await deleteStudentFromFirebase(String(change.documentKey._id));
+      logWarning(`MongoDB student ${change.documentKey._id} was unavailable; its Firebase document was removed.`);
+      return;
+    }
+    logWarning(`Ignoring MongoDB change without an operation document ID.`);
+    return;
   }
   try {
     await mirrorStudent(change.fullDocument);

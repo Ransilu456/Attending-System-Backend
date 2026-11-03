@@ -8,7 +8,7 @@ import { DateTime } from 'luxon';
 import { generateQRCode } from '../utils/qrGenerator.js';
 import { mongoIdToNumericCode } from '../utils/idConverter.js';
 import { maskId, resolveId } from '../utils/idMask.js';
-import { mirrorStudentAfterWrite } from '../integrations/firebase/student/firebaseMirrorService.js';
+import { deleteStudentFromFirebase, mirrorStudentAfterWrite } from '../integrations/firebase/student/firebaseMirrorService.js';
 
 dotenv.config();
 
@@ -226,6 +226,9 @@ export const deleteStudent = async (req, res) => {
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
     }
+    // MongoDB deletion is the source of truth. Firebase cleanup is best-effort
+    // so it can never delay or fail the student delete API.
+    void deleteStudentFromFirebase(id).catch(() => {});
     res.status(200).json({ message: 'Student deleted successfully' });
   } catch (err) {
     res.status(500).json({ message: 'Error deleting student', error: err.message });
