@@ -190,6 +190,15 @@ export const deleteStudentDocument = async (studentId) => {
   studentDocumentCache.delete(studentId);
 };
 
+export const listFirestoreStudentIds = async () => {
+  const firebase = getFirebaseAdmin();
+  if (!firebase) throw new Error('Firebase Admin is not configured.');
+  const snapshot = await runFirebaseRead(() =>
+    firebase.firestore.collection('students').select().get()
+  );
+  return snapshot.docs.map((document) => document.id);
+};
+
 export const getFirebaseQuotaUsage = async () => {
   const state = await loadUsage();
   return {

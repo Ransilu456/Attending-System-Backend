@@ -50,6 +50,8 @@ export const startServer = async ({
   });
   logInfo(`Environment: ${process.env.NODE_ENV || 'development'}`);
   logSuccess(`Server is running in ${process.env.NODE_ENV || 'development'} mode`);
+  logInfo('API routes: /api/v1/students, /api/v1/admin, /api/v1/qr, /api/v1/attendance');
+  logInfo('Health checks: /api/v1/health and /api/v1/ready');
   connectMongoInBackground();
   return { app, server, port, host };
 };

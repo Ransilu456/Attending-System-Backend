@@ -5,6 +5,7 @@ import Student from '../../../models/student.model.js';
 import { getFirebaseAdmin, isFirebaseEnabled } from '../firebaseAdmin.js';
 import {
   deleteStudentDocument,
+  listFirestoreStudentIds,
   readStudentDocument,
   writeStudentDocument,
 } from './firebaseQuotaService.js';
@@ -18,6 +19,7 @@ let mirrorTask;
 let activeStream;
 let stopRequested = false;
 const studentMirrorTasks = new Map();
+const cleanedUnavailableStudentIds = new Set();
 
 const permanentMirrorError = (message) =>
   Object.assign(new Error(message), { permanent: true });
@@ -165,11 +167,13 @@ export const syncAllStudentsToFirebase = async ({ failOnSkipped = true } = {}) =
   let synced = 0;
   let unchanged = 0;
   let skipped = 0;
+  const mongoStudentIds = new Set();
   const cursor = Student.find({}).sort({ _id: 1 }).lean().cursor();
 
   try {
     for await (const student of cursor) {
       try {
+        mongoStudentIds.add(String(student._id));
         const changed = await mirrorStudent(student);
         if (changed) synced += 1;
         else unchanged += 1;
@@ -191,7 +195,14 @@ export const syncAllStudentsToFirebase = async ({ failOnSkipped = true } = {}) =
     await cursor.close();
   }
 
-  logInfo(`Firebase reconciliation finished: ${synced} updated, ${unchanged} unchanged, ${skipped} skipped.`);
+  const staleMirrorIds = await listFirestoreStudentIds();
+  let removed = 0;
+  for (const studentId of staleMirrorIds) {
+    if (mongoStudentIds.has(studentId)) continue;
+    if (await deleteStudentFromFirebase(studentId)) removed += 1;
+  }
+
+  logInfo(`Firebase reconciliation finished: ${synced} updated, ${unchanged} unchanged, ${skipped} skipped, ${removed} stale removed.`);
   if (skipped && failOnSkipped) {
     throw new Error(`Firebase reconciliation skipped ${skipped} student record(s); review the preceding errors.`);
   }
@@ -217,8 +228,11 @@ const deleteStudentMirror = async (studentId) => {
 
 export const deleteStudentFromFirebase = async (studentId) => {
   if (!isFirebaseEnabled()) return false;
+  const normalizedStudentId = String(studentId);
+  if (cleanedUnavailableStudentIds.has(normalizedStudentId)) return false;
   try {
-    await deleteStudentMirror(String(studentId));
+    await deleteStudentMirror(normalizedStudentId);
+    cleanedUnavailableStudentIds.add(normalizedStudentId);
     return true;
   } catch (error) {
     logWarning(`Firebase cleanup failed for deleted student ${studentId}: ${error.message}`);
@@ -262,7 +276,6 @@ const processChange = async (change) => {
   if (!change.fullDocument) {
     if (change.documentKey?._id) {
       await deleteStudentFromFirebase(String(change.documentKey._id));
-      logWarning(`MongoDB student ${change.documentKey._id} was unavailable; its Firebase document was removed.`);
       return;
     }
     logWarning(`Ignoring MongoDB change without an operation document ID.`);

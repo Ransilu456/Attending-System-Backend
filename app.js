@@ -11,7 +11,7 @@ import attendanceRoutes from './routes/attendance.routes.js';
 import { generateCsrfToken, validateCsrf } from './middleware/csrfMiddleware.js';
 import { validateInputPayload } from './utils/inputValidation.js';
 import { errorHandler } from './middleware/authMiddleware.js';
-import { logWarning } from './utils/logging/terminal.js';
+import { logError, logInfo, logWarning } from './utils/logging/terminal.js';
 
 export const createApp = () => {
   const app = express();
@@ -42,6 +42,20 @@ export const createApp = () => {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     next();
   });
+
+  if (process.env.NODE_ENV !== 'production') {
+    app.use((req, res, next) => {
+      const startedAt = Date.now();
+      res.once('finish', () => {
+        const duration = Date.now() - startedAt;
+        const message = `${req.method} ${req.originalUrl.split('?')[0]} -> ${res.statusCode} (${duration}ms)`;
+        if (res.statusCode >= 500) logError(message);
+        else if (res.statusCode >= 400 || duration >= 3000) logWarning(`${message}${duration >= 3000 ? ' [slow request]' : ''}`);
+        else logInfo(message);
+      });
+      next();
+    });
+  }
 
   app.use('/api/', rateLimit({
     windowMs: 15 * 60 * 1000,
